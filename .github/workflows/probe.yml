@@ -7,22 +7,18 @@ jobs:
       - name: Hit the candidate endpoints
         run: |
           urls=(
-            "https://services.swpc.noaa.gov/products/noaa-planetary-k-index-forecast.json"
-            "https://services.swpc.noaa.gov/json/planetary_k_index_1m.json"
-            "https://services.swpc.noaa.gov/products/solar-wind/mag-1-day.json"
-            "https://services.swpc.noaa.gov/products/solar-wind/plasma-1-day.json"
-            "https://services.swpc.noaa.gov/products/solar-wind/mag-2-hour.json"
-            "https://services.swpc.noaa.gov/json/rtsw/rtsw_mag_1m.json"
-            "https://services.swpc.noaa.gov/json/rtsw/rtsw_wind_1m.json"
-            "https://services.swpc.noaa.gov/products/summary/solar-wind-mag-field.json"
-            "https://services.swpc.noaa.gov/products/summary/solar-wind-speed.json"
-            "https://services.swpc.noaa.gov/products/alerts.json"
-            "https://services.swpc.noaa.gov/json/ovation_aurora_latest.json"
+            "https://services.swpc.noaa.gov/products/geospace/propagated-solar-wind-1-hour.json"
+            "https://services.swpc.noaa.gov/products/geospace/propagated-solar-wind.json"
+            "https://services.swpc.noaa.gov/json/rtsw/rtsw_mag_5m.json"
+            "https://services.swpc.noaa.gov/json/rtsw/rtsw_wind_5m.json"
+            "https://services.swpc.noaa.gov/json/rtsw/rtsw_mag_1h.json"
+            "https://services.swpc.noaa.gov/products/summary/solar-wind-plasma.json"
+            "https://services.swpc.noaa.gov/products/noaa-scales.json"
           )
           for u in "${urls[@]}"; do
             code=$(curl -s -o /tmp/body -w '%{http_code}' -m 25 "$u" || echo ERR)
             echo "=== $code  $u"
-            if [ "$code" = "200" ]; then head -c 420 /tmp/body; echo; echo "   [bytes: $(wc -c < /tmp/body)]"; fi
+            if [ "$code" = "200" ]; then head -c 520 /tmp/body; echo; echo "   [bytes: $(wc -c < /tmp/body)]"; fi
           done
           echo "=== CORS header on the forecast endpoint"
           curl -s -I -m 20 "https://services.swpc.noaa.gov/products/noaa-planetary-k-index-forecast.json" | grep -i -E "access-control|content-type" || true
