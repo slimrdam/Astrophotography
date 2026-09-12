@@ -103,8 +103,12 @@
     kpNow: 'https://services.swpc.noaa.gov/json/planetary_k_index_1m.json',
     scales: 'https://services.swpc.noaa.gov/products/noaa-scales.json',
     alerts: 'https://services.swpc.noaa.gov/products/alerts.json',
-    mag: 'https://services.swpc.noaa.gov/products/solar-wind/mag-1-day.json',
-    plasma: 'https://services.swpc.noaa.gov/products/solar-wind/plasma-1-day.json',
+    // Bz, Bt, speed and density for the last hour, already propagated from L1 to
+    // Earth — 7 kB, where the raw RTSW feeds are 1.7 and 2.9 MB.
+    wind: 'https://services.swpc.noaa.gov/products/geospace/propagated-solar-wind-1-hour.json',
+    // Tiny current-value fallbacks if the propagated feed is down.
+    windMag: 'https://services.swpc.noaa.gov/products/summary/solar-wind-mag-field.json',
+    windSpeed: 'https://services.swpc.noaa.gov/products/summary/solar-wind-speed.json',
     ovation: 'https://services.swpc.noaa.gov/json/ovation_aurora_latest.json'
   };
 
@@ -307,11 +311,14 @@
       + '&timezone=UTC&forecast_days=' + (days || 5);
   }
 
-  // SWPC "products" endpoints are header-row + data rows. Turn them into objects.
-  function tableToObjects(table) {
-    if (!Array.isArray(table) || table.length < 2) return [];
-    var head = table[0];
-    return table.slice(1).map(function (row) {
+  // SWPC serves two shapes: a header row followed by data rows, or a plain array
+  // of objects. Normalise both to objects.
+  function rowsToObjects(raw) {
+    if (!Array.isArray(raw) || !raw.length) return [];
+    if (!Array.isArray(raw[0])) return raw.filter(function (r) { return r && typeof r === 'object'; });
+    if (raw.length < 2) return [];
+    var head = raw[0];
+    return raw.slice(1).map(function (row) {
       var o = {};
       for (var i = 0; i < head.length; i++) o[head[i]] = row[i];
       return o;
@@ -319,7 +326,7 @@
   }
 
   function parseKpForecast(raw) {
-    return tableToObjects(raw).map(function (r) {
+    return rowsToObjects(raw).map(function (r) {
       return {
         t: parseUtc(r.time_tag),
         kp: num(r.kp),
@@ -330,37 +337,74 @@
       .sort(function (a, b) { return a.t - b.t; });
   }
 
-  function parseSolarWind(mag, plasma) {
-    var m = tableToObjects(mag).map(function (r) {
-      return { t: parseUtc(r.time_tag), bz: num(r.bz_gsm), bt: num(r.bt) };
-    }).filter(function (r) { return isFinite(r.t); });
-    var p = tableToObjects(plasma).map(function (r) {
-      return { t: parseUtc(r.time_tag), speed: num(r.speed), density: num(r.density) };
-    }).filter(function (r) { return isFinite(r.t); });
-    function lastValid(arr, key) {
-      for (var i = arr.length - 1; i >= 0; i--) if (arr[i][key] !== null) return arr[i];
+  function parseSolarWind(raw, magSummary, speedSummary) {
+    var rows = rowsToObjects(raw).map(function (r) {
+      // propagated_time_tag is when this parcel reaches Earth; that is the clock
+      // the sky runs on, so plot against it when it is there.
+      var t = parseUtc(r.propagated_time_tag || r.time_tag);
+      return {
+        t: t,
+        bz: num(r.bz),
+        bt: num(r.bt),
+        speed: num(r.speed),
+        density: num(r.density),
+        measuredAt: parseUtc(r.time_tag)
+      };
+    }).filter(function (r) { return isFinite(r.t); })
+      .sort(function (a, b) { return a.t - b.t; });
+
+    function lastValid(key) {
+      for (var i = rows.length - 1; i >= 0; i--) if (rows[i][key] !== null) return rows[i];
       return null;
     }
-    var lb = lastValid(m, 'bz'), lp = lastValid(p, 'speed');
-    // 30-minute means smooth out the single-sample spikes.
-    var cutoff = (lb ? lb.t : Date.now()) - 30 * 60000;
-    var recentBz = m.filter(function (r) { return r.t >= cutoff && r.bz !== null; })
-                    .map(function (r) { return r.bz; });
-    return {
-      series: m.filter(function (r) { return r.bz !== null; }),
+    var lb = lastValid('bz'), lp = lastValid('speed');
+    var newest = rows.length ? rows[rows.length - 1] : null;
+    var cutoff = (newest ? newest.t : Date.now()) - 30 * 60000;
+    var recentBz = rows.filter(function (r) { return r.t >= cutoff && r.bz !== null; })
+                       .map(function (r) { return r.bz; });
+
+    var out = {
+      series: rows.filter(function (r) { return r.bz !== null; }),
       bz: lb ? lb.bz : null,
       bt: lb ? lb.bt : null,
       bzMean30: recentBz.length ? recentBz.reduce(function (a, b) { return a + b; }, 0) / recentBz.length : null,
       speed: lp ? lp.speed : null,
       density: lp ? lp.density : null,
-      time: lb ? lb.t : (lp ? lp.t : null)
+      time: newest ? newest.t : null,
+      measuredAt: newest ? newest.measuredAt : null,
+      propagated: !!(newest && newest.measuredAt && newest.measuredAt !== newest.t)
+    };
+
+    // Current values only, when the hourly table is unavailable.
+    if (out.bz === null && Array.isArray(magSummary) && magSummary.length) {
+      var m = magSummary[magSummary.length - 1];
+      out.bz = num(m.bz_gsm); out.bt = num(m.bt);
+      out.bzMean30 = out.bz;
+      out.time = out.time || parseUtc(m.time_tag);
+    }
+    if (out.speed === null && Array.isArray(speedSummary) && speedSummary.length) {
+      var sp = speedSummary[speedSummary.length - 1];
+      out.speed = num(sp.proton_speed);
+      out.time = out.time || parseUtc(sp.time_tag);
+    }
+    return out;
+  }
+
+  // Current NOAA scales: {"0": {G: {Scale, Text}, ...}, "1": ...}
+  function parseScales(raw) {
+    if (!raw || typeof raw !== 'object' || !raw['0'] || !raw['0'].G) return null;
+    var g = raw['0'].G;
+    return {
+      g: g.Scale === null || g.Scale === undefined ? null : parseInt(g.Scale, 10),
+      text: g.Text || null,
+      at: raw['0'].DateStamp ? parseUtc(raw['0'].DateStamp + ' ' + (raw['0'].TimeStamp || '00:00:00')) : null
     };
   }
 
   function parseKpNow(raw) {
     if (!Array.isArray(raw) || !raw.length) return null;
     var last = raw[raw.length - 1];
-    var kp = num(last.kp_index !== undefined ? last.kp_index : last.estimated_kp);
+    var kp = num(last.estimated_kp !== undefined && last.estimated_kp !== null ? last.estimated_kp : last.kp_index);
     return { kp: kp, t: parseUtc(last.time_tag) };
   }
 
@@ -372,7 +416,7 @@
       return {
         id: a.product_id,
         issued: parseUtc(a.issue_datetime),
-        headline: (msg.match(/^(ALERT|WARNING|WATCH|SUMMARY|EXTENDED WARNING)[^\n]*/m) || [first])[0].trim(),
+        headline: (msg.match(/(?:CONTINUED |EXTENDED |CANCEL )?(?:ALERT|WARNING|WATCH|SUMMARY)\s*:[^\n\r]*/) || [first])[0].trim(),
         message: msg
       };
     }).filter(function (a) {
@@ -407,8 +451,10 @@
       kpForecast: ENDPOINTS.kpForecast,
       kpNow: ENDPOINTS.kpNow,
       alerts: ENDPOINTS.alerts,
-      mag: ENDPOINTS.mag,
-      plasma: ENDPOINTS.plasma,
+      wind: ENDPOINTS.wind,
+      windMag: ENDPOINTS.windMag,
+      windSpeed: ENDPOINTS.windSpeed,
+      scales: ENDPOINTS.scales,
       weather: weatherUrl(sites, opts.days || 5)
     };
     if (opts.ovation !== false) want.ovation = ENDPOINTS.ovation;
@@ -428,7 +474,8 @@
         kpForecast: raw.kpForecast ? parseKpForecast(raw.kpForecast) : [],
         kpNow: raw.kpNow ? parseKpNow(raw.kpNow) : null,
         alerts: raw.alerts ? parseAlerts(raw.alerts) : [],
-        wind: parseSolarWind(raw.mag || [], raw.plasma || []),
+        wind: parseSolarWind(raw.wind || [], raw.windMag, raw.windSpeed),
+        scales: raw.scales ? parseScales(raw.scales) : null,
         ovation: raw.ovation ? parseOvation(raw.ovation) : null,
         weather: normaliseWeather(raw.weather, sites)
       };
@@ -780,6 +827,8 @@
     fetchAll: fetchAll,
     weatherUrl: weatherUrl,
     parseKpForecast: parseKpForecast,
+    parseSolarWind: parseSolarWind,
+    parseScales: parseScales,
     parseOvation: parseOvation,
     // scoring
     obstruction: obstruction,

@@ -104,8 +104,8 @@ data/latest.json                 generated snapshot (do not edit)
 ## Data
 
 * [NOAA SWPC](https://services.swpc.noaa.gov/) — 3-day planetary Kp forecast, 1-minute
-  estimated Kp, DSCOVR/ACE solar wind (Bz, Bt, speed, density), OVATION aurora model,
-  alerts and watches.
+  estimated Kp, solar wind propagated from L1 to Earth (Bz, Bt, speed, density), current
+  NOAA G-scale, the OVATION aurora model, and the alert/watch feed.
 * [Open-Meteo](https://open-meteo.com/) — hourly cloud layers, visibility, temperature
   and wind per site.
 * Sun and moon geometry is computed in the browser; nothing is sent anywhere.
@@ -115,6 +115,9 @@ data/latest.json                 generated snapshot (do not edit)
 * The Kp forecast is a 3-hour *planetary average*. Substorms fire on their own
   schedule — an arc can appear at Kp 4 and nothing at all at Kp 6. When you are
   already outside, Bz held below −5 nT is the better signal.
+* SWPC moves its endpoints occasionally (the `/products/solar-wind/` files went away
+  and were replaced by the propagated geospace feed). If a panel empties out, the
+  browser console names the feed that 404'd.
 * Cloud forecasts beyond about 48 hours are soft; treat night three as a heads-up.
 * Everything is scored for looking **north**, low on the horizon. That is the only
   view that matters at this latitude until the display gets strong.

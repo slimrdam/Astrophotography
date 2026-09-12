@@ -127,7 +127,7 @@ function issueBody(nights, summary) {
   const now = A.nowcast(data, A.SITES.filter((s) => s.id === nights[0].best.siteId)[0], Date.now());
 
   // Solar wind history, thinned to 5-minute steps for the sparkline.
-  const series = (data.wind.series || []).filter((_, i) => i % 5 === 0)
+  const series = (data.wind.series || []).filter((_, i) => i % 2 === 0)
     .map((p) => ({ t: p.t, bz: r1(p.bz) }));
 
   const snapshot = {
@@ -139,10 +139,12 @@ function issueBody(nights, summary) {
     nights: nights.map(slimNight),
     nowcast: now,
     kpNow: data.kpNow,
+    scales: data.scales,
     ovation: data.ovation,
     wind: {
       bz: r1(data.wind.bz), bt: r1(data.wind.bt), bzMean30: r1(data.wind.bzMean30),
-      speed: r1(data.wind.speed), density: r1(data.wind.density), time: data.wind.time,
+      speed: r1(data.wind.speed), density: r1(data.wind.density),
+      time: data.wind.time, measuredAt: data.wind.measuredAt, propagated: data.wind.propagated,
       series
     },
     alerts: (data.alerts || []).slice(0, 5).map((a) => ({
