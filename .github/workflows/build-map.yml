@@ -1,0 +1,17 @@
+name: Build map outline
+on: workflow_dispatch
+permissions:
+  contents: write
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: '22' }
+      - run: node scripts/build-map.js
+      - run: |
+          git config user.name  "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add assets/nl-outline.js
+          git diff --cached --quiet && echo "unchanged" || { git commit -m "assets: regenerate the Netherlands outline"; git push; }
