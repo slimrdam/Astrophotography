@@ -1,0 +1,30 @@
+name: Probe feeds
+on: workflow_dispatch
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Hit the candidate endpoints
+        run: |
+          urls=(
+            "https://services.swpc.noaa.gov/products/noaa-planetary-k-index-forecast.json"
+            "https://services.swpc.noaa.gov/json/planetary_k_index_1m.json"
+            "https://services.swpc.noaa.gov/products/solar-wind/mag-1-day.json"
+            "https://services.swpc.noaa.gov/products/solar-wind/plasma-1-day.json"
+            "https://services.swpc.noaa.gov/products/solar-wind/mag-2-hour.json"
+            "https://services.swpc.noaa.gov/json/rtsw/rtsw_mag_1m.json"
+            "https://services.swpc.noaa.gov/json/rtsw/rtsw_wind_1m.json"
+            "https://services.swpc.noaa.gov/products/summary/solar-wind-mag-field.json"
+            "https://services.swpc.noaa.gov/products/summary/solar-wind-speed.json"
+            "https://services.swpc.noaa.gov/products/alerts.json"
+            "https://services.swpc.noaa.gov/json/ovation_aurora_latest.json"
+          )
+          for u in "${urls[@]}"; do
+            code=$(curl -s -o /tmp/body -w '%{http_code}' -m 25 "$u" || echo ERR)
+            echo "=== $code  $u"
+            if [ "$code" = "200" ]; then head -c 420 /tmp/body; echo; echo "   [bytes: $(wc -c < /tmp/body)]"; fi
+          done
+          echo "=== CORS header on the forecast endpoint"
+          curl -s -I -m 20 "https://services.swpc.noaa.gov/products/noaa-planetary-k-index-forecast.json" | grep -i -E "access-control|content-type" || true
+          echo "=== open-meteo"
+          curl -s -m 25 "https://api.open-meteo.com/v1/forecast?latitude=53.17,52.37&longitude=4.88,4.90&hourly=cloud_cover,cloud_cover_low,visibility&timezone=UTC&forecast_days=2" | head -c 400; echo
