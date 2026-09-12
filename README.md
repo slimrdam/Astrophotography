@@ -15,8 +15,9 @@ all four together, per site, per night.
 **Locally** — open `index.html` in a browser. It fetches live data directly from
 NOAA and Open-Meteo; nothing is installed and no API key is needed.
 
-**Hosted** — in the repo's *Settings → Pages*, set the source to `main` / `/ (root)`.
-The dashboard is then at `https://<you>.github.io/Astrophotography/`, which is the
+**Hosted** — The *Publish dashboard* workflow deploys to GitHub Pages on every push to
+`main` that touches the dashboard, and switches Pages on the first time it runs.
+The result lives at `https://slimrdam.github.io/Astrophotography/` — that is the
 version worth bookmarking on a phone.
 
 The page refreshes itself: live feeds every 15 minutes, and the three-night outlook

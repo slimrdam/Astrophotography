@@ -1,0 +1,49 @@
+name: Publish dashboard
+
+# Deploys the dashboard to GitHub Pages. `enablement: true` turns Pages on the
+# first time this runs, so there is no settings toggle to remember.
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'index.html'
+      - 'assets/**'
+      - 'data/**'
+      - '.github/workflows/pages.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Stage the static site
+        run: |
+          mkdir -p _site/assets _site/data
+          cp index.html _site/
+          cp assets/*.js _site/assets/
+          cp data/latest.json _site/data/ 2>/dev/null || echo "No snapshot yet — the page will use live feeds only."
+
+      - uses: actions/configure-pages@v5
+        with:
+          enablement: true
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: _site
+
+      - id: deployment
+        uses: actions/deploy-pages@v4
