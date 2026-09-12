@@ -1,0 +1,842 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Aurora Watch NL</title>
+<meta name="description" content="Geomagnetic storm and cloud-cover dashboard for hunting the aurora from the Netherlands.">
+<style>
+  :root {
+    color-scheme: dark;
+    --plane:        #0a0c12;
+    --surface-1:    #12151d;
+    --surface-2:    #171b25;
+    --surface-3:    #1e2330;
+    --ink:          #f2f4f8;
+    --ink-2:        #b9c0cf;
+    --ink-muted:    #8a92a3;
+    --grid:         #232836;
+    --baseline:     #333a4c;
+    --hairline:     rgba(255,255,255,0.10);
+
+    /* single-hue sequential ramp for Kp magnitude (light = more) */
+    --kp-1: #1c5cab;
+    --kp-2: #2a78d6;
+    --kp-3: #3987e5;
+    --kp-4: #6da7ec;
+    --kp-5: #9ec5f4;
+    --series-1: #3987e5;
+
+    /* occlusion (cloud) is chrome, not a series */
+    --occlusion-fill: rgba(126,136,158,0.30);
+    --occlusion-line: #8e97ab;
+
+    --good:     #0ca30c;
+    --warning:  #fab219;
+    --serious:  #ec835a;
+    --critical: #d03b3b;
+    --aurora:   #2ee59d;
+
+    --radius: 14px;
+    --font: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  }
+  * { box-sizing: border-box; }
+  html, body { background: var(--plane); }
+  body {
+    margin: 0;
+    font-family: var(--font);
+    color: var(--ink);
+    font-size: 15px;
+    line-height: 1.5;
+    -webkit-font-smoothing: antialiased;
+  }
+  .wrap { max-width: 1120px; margin: 0 auto; padding: 20px 16px 64px; }
+
+  /* ---------- header ---------- */
+  header.top {
+    display: flex; flex-wrap: wrap; gap: 12px;
+    align-items: baseline; justify-content: space-between;
+    padding-block: 8px 18px;
+  }
+  h1 {
+    font-size: 22px; font-weight: 650; margin: 0; letter-spacing: -0.01em;
+  }
+  h1 .dot {
+    display: inline-block; width: 9px; height: 9px; border-radius: 50%;
+    background: var(--aurora); margin-right: 9px; vertical-align: middle;
+    box-shadow: 0 0 12px var(--aurora);
+  }
+  .sub { color: var(--ink-muted); font-size: 13px; margin: 2px 0 0; }
+  .top-actions { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+  button.ghost {
+    background: var(--surface-2); color: var(--ink-2);
+    border: 1px solid var(--hairline); border-radius: 999px;
+    padding: 6px 13px; font: inherit; font-size: 13px; cursor: pointer;
+  }
+  button.ghost:hover { background: var(--surface-3); color: var(--ink); }
+  button.ghost[aria-pressed="true"] { border-color: var(--aurora); color: var(--aurora); }
+
+  /* ---------- verdict hero ---------- */
+  .hero {
+    background: var(--surface-1); border: 1px solid var(--hairline);
+    border-radius: var(--radius); padding: 20px; margin-bottom: 16px;
+    position: relative; overflow: hidden;
+  }
+  .hero::after {
+    content: ""; position: absolute; inset: 0; pointer-events: none;
+    background: radial-gradient(120% 90% at 85% -20%, rgba(46,229,157,0.10), transparent 60%);
+  }
+  .hero.is-go::after { background: radial-gradient(120% 90% at 85% -20%, rgba(46,229,157,0.20), transparent 62%); }
+  .hero-top { display: flex; flex-wrap: wrap; gap: 16px; align-items: center; justify-content: space-between; }
+  .verdict {
+    display: inline-flex; align-items: center; gap: 10px;
+    font-size: 30px; font-weight: 700; letter-spacing: -0.02em; line-height: 1.1;
+  }
+  .verdict .icon { font-size: 26px; line-height: 1; }
+  .verdict.go     { color: var(--good); }
+  .verdict.watch  { color: var(--warning); }
+  .verdict.slim   { color: var(--serious); }
+  .verdict.no     { color: var(--ink-muted); }
+  .hero-when { font-size: 14px; color: var(--ink-2); margin-top: 2px; }
+  .hero-score { text-align: right; }
+  .hero-score .n { font-size: 40px; font-weight: 700; letter-spacing: -0.03em; line-height: 1; }
+  .hero-score .lbl { font-size: 12px; color: var(--ink-muted); text-transform: uppercase; letter-spacing: 0.08em; }
+  .hero-line { margin: 14px 0 0; font-size: 15px; color: var(--ink); }
+  .hero-facts { display: flex; flex-wrap: wrap; gap: 8px 22px; margin-top: 12px; font-size: 13px; color: var(--ink-2); }
+  .hero-facts b { color: var(--ink); font-weight: 600; }
+  .trip {
+    margin-top: 14px; padding: 12px 14px; border-radius: 10px;
+    background: rgba(46,229,157,0.09); border: 1px solid rgba(46,229,157,0.35);
+    font-size: 14px;
+  }
+  .trip a { color: var(--aurora); }
+
+  /* ---------- generic card ---------- */
+  .card {
+    background: var(--surface-1); border: 1px solid var(--hairline);
+    border-radius: var(--radius); padding: 16px 18px; margin-bottom: 16px;
+  }
+  .card > h2 {
+    font-size: 13px; text-transform: uppercase; letter-spacing: 0.09em;
+    color: var(--ink-muted); margin: 0 0 14px; font-weight: 600;
+  }
+  .card-head { display: flex; flex-wrap: wrap; gap: 10px; align-items: baseline; justify-content: space-between; }
+
+  /* ---------- stat tiles ---------- */
+  .tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 1px; background: var(--hairline); border-radius: 10px; overflow: hidden; }
+  .tile { background: var(--surface-2); padding: 12px 14px; }
+  .tile .k { font-size: 11px; letter-spacing: 0.07em; text-transform: uppercase; color: var(--ink-muted); }
+  .tile .v { font-size: 24px; font-weight: 650; letter-spacing: -0.02em; margin-top: 3px; }
+  .tile .v small { font-size: 12px; font-weight: 500; color: var(--ink-muted); margin-left: 3px; letter-spacing: 0; }
+  .tile .note { font-size: 12px; color: var(--ink-muted); margin-top: 2px; }
+  .tile .v.pos { color: var(--good); }
+  .tile .v.neg { color: var(--aurora); }
+
+  /* ---------- night cards ---------- */
+  .nights { display: grid; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); gap: 12px; }
+  .night {
+    text-align: left; width: 100%;
+    background: var(--surface-2); border: 1px solid var(--hairline);
+    border-radius: 12px; padding: 14px; cursor: pointer; font: inherit; color: inherit;
+    transition: border-color .15s, background .15s;
+  }
+  .night:hover { background: var(--surface-3); }
+  .night[aria-selected="true"] { border-color: var(--series-1); background: var(--surface-3); }
+  .night .when { font-size: 14px; font-weight: 600; }
+  .night .row { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; margin-top: 8px; }
+  .night .score { font-size: 30px; font-weight: 700; letter-spacing: -0.03em; }
+  .pill {
+    display: inline-flex; align-items: center; gap: 5px;
+    font-size: 11.5px; font-weight: 650; letter-spacing: 0.06em; text-transform: uppercase;
+    padding: 3px 9px; border-radius: 999px; border: 1px solid currentColor;
+  }
+  .pill.go { color: var(--good); }
+  .pill.watch { color: var(--warning); }
+  .pill.slim { color: var(--serious); }
+  .pill.no { color: var(--ink-muted); }
+  .night .meta { font-size: 12.5px; color: var(--ink-2); margin-top: 8px; display: grid; gap: 3px; }
+  .bar { height: 4px; border-radius: 2px; background: var(--surface-1); overflow: hidden; margin-top: 10px; }
+  .bar > i { display: block; height: 100%; border-radius: 2px; background: var(--series-1); }
+
+  /* ---------- chart ---------- */
+  .chart-wrap { position: relative; }
+  svg { display: block; width: 100%; }
+  svg text { font-family: var(--font); }
+  .legend { display: flex; flex-wrap: wrap; gap: 6px 18px; font-size: 12.5px; color: var(--ink-2); margin-top: 10px; }
+  .legend span { display: inline-flex; align-items: center; gap: 6px; }
+  .swatch { width: 12px; height: 12px; border-radius: 3px; display: inline-block; }
+  .tooltip {
+    position: absolute; pointer-events: none; z-index: 5;
+    background: rgba(10,12,18,0.96); border: 1px solid var(--hairline);
+    border-radius: 9px; padding: 9px 11px; font-size: 12.5px; line-height: 1.45;
+    color: var(--ink); min-width: 168px; box-shadow: 0 8px 24px rgba(0,0,0,.5);
+    opacity: 0; transition: opacity .1s;
+  }
+  .tooltip b { font-weight: 650; }
+  .tooltip .tt-row { display: flex; justify-content: space-between; gap: 14px; color: var(--ink-2); }
+  .tooltip .tt-row b { color: var(--ink); }
+
+  /* ---------- table ---------- */
+  .scroll-x { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+  table { border-collapse: collapse; width: 100%; font-size: 13.5px; min-width: 560px; }
+  th, td { text-align: left; padding: 9px 10px; border-bottom: 1px solid var(--grid); vertical-align: top; }
+  th { font-size: 11.5px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--ink-muted); font-weight: 600; }
+  td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
+  tr.trip-site td:first-child::after { content: " ⛴"; color: var(--ink-muted); }
+  .minibar { display: inline-block; vertical-align: middle; width: 62px; height: 6px; border-radius: 3px; background: var(--surface-3); margin-right: 8px; overflow: hidden; }
+  .minibar > i { display: block; height: 100%; background: var(--series-1); }
+
+  /* ---------- alerts ---------- */
+  .alert-item { border-top: 1px solid var(--grid); padding: 11px 0; font-size: 13.5px; }
+  .alert-item:first-child { border-top: 0; padding-top: 0; }
+  .alert-item .at { color: var(--ink-muted); font-size: 12px; }
+  .alert-item pre {
+    white-space: pre-wrap; font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    font-size: 12px; color: var(--ink-2); margin: 6px 0 0; max-height: 150px; overflow: auto;
+  }
+
+  .status-line { font-size: 12.5px; color: var(--ink-muted); display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+  .warn-banner {
+    background: rgba(250,178,25,0.10); border: 1px solid rgba(250,178,25,0.4);
+    color: #ffd88a; border-radius: 10px; padding: 10px 13px; font-size: 13.5px; margin-bottom: 14px;
+  }
+  details { font-size: 13.5px; color: var(--ink-2); }
+  details > summary { cursor: pointer; color: var(--ink-2); font-size: 13px; padding: 4px 0; }
+  details[open] > summary { color: var(--ink); margin-bottom: 8px; }
+  a { color: #7fb2f2; }
+  footer { color: var(--ink-muted); font-size: 12.5px; margin-top: 26px; line-height: 1.7; }
+  .skeleton { color: var(--ink-muted); padding: 28px 0; text-align: center; }
+  @media (max-width: 560px) {
+    .hero-score { text-align: left; }
+    .verdict { font-size: 25px; }
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header class="top">
+    <div>
+      <h1><span class="dot"></span>Aurora Watch NL</h1>
+      <p class="sub">Geomagnetic activity × cloud cover × darkness, for the Dutch coast and the Wadden islands.</p>
+    </div>
+    <div class="top-actions">
+      <button class="ghost" id="notify-btn" type="button">Alert me</button>
+      <button class="ghost" id="refresh-btn" type="button">Refresh</button>
+    </div>
+  </header>
+
+  <div id="banner"></div>
+  <div id="hero"><div class="hero"><div class="skeleton">Pulling NOAA space-weather and Open-Meteo cloud data…</div></div></div>
+
+  <section class="card" id="now-card">
+    <div class="card-head">
+      <h2>Right now — solar wind at L1</h2>
+      <span class="status-line" id="now-time"></span>
+    </div>
+    <div class="tiles" id="now-tiles"></div>
+    <div class="chart-wrap" id="bz-chart"></div>
+  </section>
+
+  <section class="card">
+    <div class="card-head">
+      <h2>The next three nights</h2>
+      <span class="status-line">Tap a night to load its timeline</span>
+    </div>
+    <div class="nights" id="nights"></div>
+  </section>
+
+  <section class="card">
+    <div class="card-head">
+      <h2 id="timeline-title">Night timeline</h2>
+      <span class="status-line" id="site-picker"></span>
+    </div>
+    <div class="chart-wrap" id="timeline"></div>
+    <div class="legend" id="timeline-legend"></div>
+    <details id="hour-table-wrap">
+      <summary>Hour-by-hour table (same numbers, no chart)</summary>
+      <div class="scroll-x" id="hour-table"></div>
+    </details>
+  </section>
+
+  <section class="card">
+    <div class="card-head">
+      <h2 id="sites-title">Where to stand</h2>
+      <span class="status-line">Scored for the selected night</span>
+    </div>
+    <div class="scroll-x" id="sites-table"></div>
+  </section>
+
+  <section class="card">
+    <h2>NOAA alerts &amp; watches</h2>
+    <div id="alerts"></div>
+  </section>
+
+  <section class="card">
+    <h2>How this is scored</h2>
+    <div id="method"></div>
+  </section>
+
+  <footer>
+    <div id="footer-status"></div>
+    <p>Sources: <a href="https://www.swpc.noaa.gov/">NOAA SWPC</a> (planetary Kp forecast, 1-minute estimated Kp, DSCOVR/ACE solar wind, OVATION aurora model, alerts) ·
+    <a href="https://open-meteo.com/">Open-Meteo</a> (hourly cloud layers, visibility, wind). Sun and moon geometry computed locally.
+    Ferry times: <a href="https://www.teso.nl/en">TESO Texel</a>.</p>
+  </footer>
+</div>
+
+<script src="assets/aurora-core.js"></script>
+<script>
+(function () {
+  'use strict';
+  var A = window.AuroraCore;
+  var TZ = A.TZ;
+  var MS_HOUR = 3600000;
+  var REFRESH_MS = 15 * 60 * 1000;
+
+  var state = {
+    nights: [], now: null, wind: null, alerts: [], ovation: null, kpNow: null,
+    fetchedAt: 0, stale: false, errors: {}, selectedNight: 0, selectedSite: null,
+    loading: false, ovationCache: null, ovationAt: 0
+  };
+
+  /* ---------------- helpers ---------------- */
+  function $(id) { return document.getElementById(id); }
+  function esc(s) {
+    return String(s).replace(/[&<>"']/g, function (c) {
+      return ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c];
+    });
+  }
+  function fmtTime(ms) { return A.fmtTime(ms, TZ); }
+  function fmtDay(ms) {
+    return new Intl.DateTimeFormat('en-GB', { timeZone: TZ, weekday: 'short', day: 'numeric', month: 'short' }).format(new Date(ms));
+  }
+  function ago(ms) {
+    var m = Math.round((Date.now() - ms) / 60000);
+    if (m < 1) return 'just now';
+    if (m < 60) return m + ' min ago';
+    var h = Math.round(m / 60);
+    return h + (h === 1 ? ' hour ago' : ' hours ago');
+  }
+  function kpColor(kp) {
+    if (kp === null || kp === undefined) return '#2a3040';
+    if (kp < 4) return 'var(--kp-1)';
+    if (kp < 5) return 'var(--kp-2)';
+    if (kp < 6) return 'var(--kp-3)';
+    if (kp < 7) return 'var(--kp-4)';
+    return 'var(--kp-5)';
+  }
+  var VERDICT_ICON = { go: '●', watch: '◐', slim: '○', no: '·' };
+
+  /* ---------------- loading ---------------- */
+  function load() {
+    if (state.loading) return Promise.resolve();
+    state.loading = true;
+    setStatus('Refreshing…');
+    // The OVATION grid is ~1.5 MB; half-hourly is plenty for a page left open.
+    var wantOvation = !state.ovationAt || (Date.now() - state.ovationAt > 30 * 60 * 1000);
+    return A.fetchAll({ sites: A.SITES, days: 5, ovation: wantOvation }).then(function (data) {
+      if (data.ovation) { state.ovationCache = data.ovation; state.ovationAt = Date.now(); }
+      else if (state.ovationCache) { data.ovation = state.ovationCache; }
+      // Individual feeds fail independently, so an "empty success" is possible.
+      // Without a Kp forecast there is nothing to score — use the snapshot instead
+      // of drawing a confident-looking zero.
+      if (!data.kpForecast.length) throw new Error('Kp forecast unavailable');
+      var nights = A.buildNights(data, { sites: A.SITES, nights: 3 });
+      state.nights = nights;
+      state.now = A.nowcast(data, bestSiteObj(nights), Date.now());
+      state.wind = data.wind;
+      state.alerts = data.alerts;
+      state.ovation = data.ovation;
+      state.kpNow = data.kpNow;
+      state.errors = data.errors || {};
+      state.fetchedAt = data.fetchedAt;
+      state.stale = false;
+      state.loading = false;
+      if (!state.selectedSite) state.selectedSite = nights[0].best.siteId;
+      render();
+      maybeNotify();
+    }).catch(function (e) {
+      state.loading = false;
+      state.errors = { all: e.message || String(e) };
+      return loadSnapshot().then(render, render);
+    });
+  }
+
+  // Fallback: the snapshot the daily GitHub Action commits to the repo.
+  function loadSnapshot() {
+    return fetch('data/latest.json', { cache: 'no-store' })
+      .then(function (r) { if (!r.ok) throw new Error('no snapshot'); return r.json(); })
+      .then(function (s) {
+        A.rehydrateSnapshot(s);
+        state.nights = s.nights || [];
+        state.now = s.nowcast || null;
+        state.wind = s.wind || null;
+        state.alerts = s.alerts || [];
+        state.ovation = s.ovation || null;
+        state.kpNow = s.kpNow || null;
+        state.fetchedAt = s.fetchedAt || 0;
+        state.stale = true;
+        if (!state.selectedSite && state.nights[0]) state.selectedSite = state.nights[0].best.siteId;
+      })
+      .catch(function () { /* nothing to fall back on */ });
+  }
+
+  function bestSiteObj(nights) {
+    var id = state.selectedSite || (nights[0] && nights[0].best.siteId);
+    return A.SITES.filter(function (s) { return s.id === id; })[0] || A.SITES[0];
+  }
+  function setStatus(msg) {
+    var el = $('footer-status');
+    if (el) el.textContent = msg;
+  }
+
+  /* ---------------- render ---------------- */
+  function render() {
+    if (!state.nights.length) {
+      $('hero').innerHTML = '<div class="hero"><div class="skeleton">No data could be loaded — neither the live feeds nor a stored snapshot. Check the connection and hit Refresh.</div></div>';
+      renderBanner();
+      return;
+    }
+    renderBanner();
+    renderHero();
+    renderNow();
+    renderNights();
+    renderTimeline();
+    renderSitesTable();
+    renderAlerts();
+    renderMethod();
+    setStatus('Data fetched ' + ago(state.fetchedAt) + '. Auto-refresh every 15 minutes; the outlook rebuilds itself every day.');
+  }
+
+  function renderBanner() {
+    var msgs = [];
+    if (state.stale) msgs.push('Live feeds unreachable — showing the last daily snapshot, taken ' + ago(state.fetchedAt) + '. Numbers will not update until the connection is back.');
+    var failed = Object.keys(state.errors || {});
+    if (!state.stale && failed.length) msgs.push('Some feeds did not answer (' + failed.join(', ') + '); the rest is current.');
+    $('banner').innerHTML = msgs.length ? '<div class="warn-banner">' + esc(msgs.join(' ')) + '</div>' : '';
+  }
+
+  function renderHero() {
+    var s = A.summarise(state.nights, TZ);
+    var night = s.night;
+    var b = night.best;
+    var v = night.verdict;
+    var win = b.bestWindow;
+    var w = night.window;
+    var moonPct = Math.round(w.moonFraction * 100);
+    var facts = [];
+    facts.push('<span>Dark <b>' + fmtTime(w.start) + '–' + fmtTime(w.end) + '</b>' +
+      (w.darkHours ? ' (' + w.darkHours.toFixed(1) + ' h below −12°)' : '') + '</span>');
+    facts.push('<span>Kp peak <b>' + (b.kpMax !== null ? b.kpMax.toFixed(1) : '—') + '</b>' +
+      ' · needs <b>' + b.site.kpCamera.toFixed(1) + '</b> for a camera, <b>' + b.site.kpEye.toFixed(1) + '</b> for the eye here</span>');
+    facts.push('<span>Northern horizon blocked <b>' + (b.cloudBest !== null ? b.cloudBest + '%' : '—') + '</b> at best</span>');
+    facts.push('<span>Moon <b>' + moonPct + '%</b>' + (w.moonUpFraction > 0.05 ? ', up ' + Math.round(w.moonUpFraction * 100) + '% of the dark window' : ', below the horizon') + '</span>');
+
+    var trip = '';
+    if (night.tripWorthIt) {
+      var t = night.tripBest;
+      trip = '<div class="trip"><b>Worth the drive:</b> ' + esc(t.site.name) + ' scores <b>' + t.score + '</b> versus ' +
+        (night.home ? night.home.score + ' at ' + esc(night.home.site.short) : 'the city') + '. ' + esc(t.site.travel) +
+        (t.site.id === 'texel' ? ' <a href="https://www.teso.nl/en" target="_blank" rel="noopener">Check the TESO ferry timetable</a> before you commit.' : '') +
+        '</div>';
+    }
+
+    $('hero').innerHTML =
+      '<div class="hero' + (v.key === 'go' ? ' is-go' : '') + '">' +
+        '<div class="hero-top">' +
+          '<div>' +
+            '<div class="verdict ' + v.key + '"><span class="icon">' + VERDICT_ICON[v.key] + '</span>' + v.label +
+              ' · <span style="color:var(--ink)">' + esc(A.fmtNightLabel(night.dateKey, night.index, TZ)) + '</span></div>' +
+            '<div class="hero-when">' + esc(v.blurb) + ' Best spot: <b style="color:var(--ink)">' + esc(b.site.name) + '</b>' +
+              (win ? ', prime window ' + fmtTime(win.start) + '–' + fmtTime(win.end) : '') + '.</div>' +
+          '</div>' +
+          '<div class="hero-score"><div class="n" style="color:' + (v.key === 'go' ? 'var(--good)' : v.key === 'watch' ? 'var(--warning)' : 'var(--ink)') + '">' +
+            b.score + '</div><div class="lbl">score / 100</div></div>' +
+        '</div>' +
+        '<div class="hero-facts">' + facts.join('') + '</div>' +
+        trip +
+      '</div>';
+  }
+
+  function renderNow() {
+    var n = state.now || {};
+    var w = state.wind || {};
+    var tiles = [];
+    var kp = state.kpNow ? state.kpNow.kp : null;
+    tiles.push(tile('Kp now', kp === null ? '—' : kp.toFixed(1), kp === null ? 'estimated planetary K' : (kp >= 5 ? 'storm level G' + Math.max(1, Math.round(kp - 4)) : 'quiet to unsettled')));
+    var bz = w.bzMean30 !== null && w.bzMean30 !== undefined ? w.bzMean30 : w.bz;
+    tiles.push(tile('Bz (30 min)', bz === null || bz === undefined ? '—' : bz.toFixed(1) + '<small>nT</small>',
+      bz === null || bz === undefined ? '' : (bz < -5 ? 'strongly south — the door is open' : bz < 0 ? 'south — favourable' : 'north — energy stays out'),
+      bz !== null && bz !== undefined && bz < -5 ? 'neg' : ''));
+    tiles.push(tile('Solar wind', w.speed ? Math.round(w.speed) + '<small>km/s</small>' : '—',
+      w.speed ? (w.speed > 600 ? 'fast stream' : w.speed > 450 ? 'elevated' : 'ambient') : ''));
+    tiles.push(tile('Density', w.density !== null && w.density !== undefined ? w.density.toFixed(1) + '<small>p/cm³</small>' : '—', 'protons'));
+    tiles.push(tile('Bt', w.bt !== null && w.bt !== undefined ? w.bt.toFixed(1) + '<small>nT</small>' : '—', 'total field'));
+    if (state.ovation) {
+      tiles.push(tile('Oval to the north', Math.round(state.ovation.north) + '<small>%</small>',
+        'OVATION 54–66°N, over the North Sea'));
+    }
+    $('now-tiles').innerHTML = tiles.join('');
+    $('now-time').textContent = w.time ? 'L1 measurement ' + fmtTime(w.time) + ' (' + ago(w.time) + '), ~30–60 min ahead of Earth'
+      : 'solar wind feed unavailable';
+    renderBzChart();
+  }
+
+  function tile(k, v, note, cls) {
+    return '<div class="tile"><div class="k">' + esc(k) + '</div><div class="v ' + (cls || '') + '">' + v + '</div>' +
+      (note ? '<div class="note">' + esc(note) + '</div>' : '') + '</div>';
+  }
+
+  /* ---------------- Bz sparkline ---------------- */
+  function renderBzChart() {
+    var host = $('bz-chart');
+    var series = (state.wind && state.wind.series) || [];
+    if (series.length < 5) { host.innerHTML = ''; return; }
+    var W = host.clientWidth || 640, H = 110;
+    var m = { t: 16, r: 12, b: 20, l: 40 };
+    var t0 = series[0].t, t1 = series[series.length - 1].t;
+    var vals = series.map(function (d) { return d.bz; });
+    var lo = Math.min(-12, Math.floor(Math.min.apply(null, vals) - 2));
+    var hi = Math.max(12, Math.ceil(Math.max.apply(null, vals) + 2));
+    var x = function (t) { return m.l + (t - t0) / (t1 - t0) * (W - m.l - m.r); };
+    var y = function (v) { return m.t + (hi - v) / (hi - lo) * (H - m.t - m.b); };
+
+    var parts = [];
+    // southward half of the plane is the interesting one
+    parts.push('<rect x="' + m.l + '" y="' + y(0) + '" width="' + (W - m.l - m.r) + '" height="' + (y(lo) - y(0)) + '" fill="rgba(46,229,157,0.06)"/>');
+    parts.push('<line x1="' + m.l + '" y1="' + y(0) + '" x2="' + (W - m.r) + '" y2="' + y(0) + '" stroke="var(--baseline)" stroke-width="1"/>');
+    [hi, 0, lo].forEach(function (v) {
+      parts.push('<text x="' + (m.l - 7) + '" y="' + (y(v) + 4) + '" text-anchor="end" font-size="10" fill="var(--ink-muted)">' + v + '</text>');
+    });
+    var d = series.map(function (p, i) { return (i ? 'L' : 'M') + x(p.t).toFixed(1) + ',' + y(p.bz).toFixed(1); }).join('');
+    parts.push('<path d="' + d + '" fill="none" stroke="var(--series-1)" stroke-width="2" stroke-linejoin="round"/>');
+    var last = series[series.length - 1];
+    parts.push('<circle cx="' + x(last.t) + '" cy="' + y(last.bz) + '" r="4" fill="var(--series-1)" stroke="var(--surface-1)" stroke-width="2"/>');
+    parts.push('<text x="' + m.l + '" y="' + (H - 5) + '" font-size="10.5" fill="var(--ink-muted)">' + fmtTime(t0) + '</text>');
+    parts.push('<text x="' + (W - m.r) + '" y="' + (H - 5) + '" text-anchor="end" font-size="10.5" fill="var(--ink-muted)">' + fmtTime(t1) + '</text>');
+    parts.push('<text x="' + (m.l + 6) + '" y="' + (m.t + 2) + '" font-size="10.5" fill="var(--ink-muted)">Bz, nT — last 24 h (south is below the line)</text>');
+
+    host.innerHTML = '<svg viewBox="0 0 ' + W + ' ' + H + '" height="' + H + '" role="img" aria-label="Interplanetary magnetic field Bz over the last 24 hours">' + parts.join('') + '</svg>';
+  }
+
+  /* ---------------- night cards ---------------- */
+  function renderNights() {
+    $('nights').innerHTML = state.nights.map(function (n, i) {
+      var b = n.best, v = n.verdict, w = n.window;
+      return '<button class="night" role="tab" aria-selected="' + (i === state.selectedNight) + '" data-night="' + i + '">' +
+        '<div class="when">' + esc(A.fmtNightLabel(n.dateKey, n.index, TZ)) + ' <span style="color:var(--ink-muted);font-weight:400">· ' + esc(fmtDay(A.localNoonMs(n.dateKey, TZ))) + '</span></div>' +
+        '<div class="row"><div class="score">' + b.score + '</div><span class="pill ' + v.key + '">' + VERDICT_ICON[v.key] + ' ' + v.label + '</span></div>' +
+        '<div class="bar"><i style="width:' + Math.max(2, b.score) + '%;background:' + (v.key === 'go' ? 'var(--good)' : v.key === 'watch' ? 'var(--warning)' : v.key === 'slim' ? 'var(--serious)' : 'var(--ink-muted)') + '"></i></div>' +
+        '<div class="meta">' +
+          '<span>Kp peak ' + (b.kpMax !== null ? b.kpMax.toFixed(1) : '—') + ' · best spot ' + esc(b.site.short) + '</span>' +
+          '<span>' + (b.cloudBest !== null ? b.cloudBest + '% blocked at best hour' : 'cloud data missing') + '</span>' +
+          '<span>Dark ' + fmtTime(w.start) + '–' + fmtTime(w.end) + ' · moon ' + Math.round(w.moonFraction * 100) + '%</span>' +
+        '</div></button>';
+    }).join('');
+    Array.prototype.forEach.call(document.querySelectorAll('.night'), function (el) {
+      el.addEventListener('click', function () {
+        state.selectedNight = +el.getAttribute('data-night');
+        renderNights(); renderTimeline(); renderSitesTable();
+      });
+    });
+  }
+
+  /* ---------------- timeline ---------------- */
+  function currentNight() { return state.nights[state.selectedNight] || state.nights[0]; }
+  function currentSiteScore() {
+    var n = currentNight();
+    if (!n) return null;
+    var found = n.sites.filter(function (s) { return s.siteId === state.selectedSite; })[0];
+    return found || n.best;
+  }
+
+  function renderTimeline() {
+    var n = currentNight();
+    if (!n) return;
+    var ss = currentSiteScore();
+    state.selectedSite = ss.siteId;
+
+    $('timeline-title').textContent = A.fmtNightLabel(n.dateKey, n.index, TZ) + ' at ' + ss.site.short;
+    $('site-picker').innerHTML = n.sites.slice().sort(function (a, b) { return a.site.lat - b.site.lat; }).map(function (s) {
+      return '<button class="ghost" data-site="' + s.siteId + '" aria-pressed="' + (s.siteId === ss.siteId) + '">' + esc(s.site.short) + '</button>';
+    }).join(' ');
+    Array.prototype.forEach.call(document.querySelectorAll('[data-site]'), function (el) {
+      el.addEventListener('click', function () {
+        state.selectedSite = el.getAttribute('data-site');
+        renderTimeline(); renderSitesTable();
+      });
+    });
+
+    drawTimeline(n, ss);
+    renderHourTable(n, ss);
+  }
+
+  function drawTimeline(night, ss) {
+    var host = $('timeline');
+    var hours = ss.hours;
+    if (!hours.length) { host.innerHTML = '<div class="skeleton">No hourly data for this night.</div>'; return; }
+    var W = host.clientWidth || 680;
+    var kpH = 148, cloudH = 100, gap = 40, axisH = 22;
+    var m = { l: 42, r: 14, t: 28 };
+    var narrow = W < 560;
+    var H = m.t + kpH + gap + cloudH + axisH;
+    var t0 = hours[0].t - MS_HOUR / 2, t1 = hours[hours.length - 1].t + MS_HOUR * 1.5;
+    var innerW = W - m.l - m.r;
+    var x = function (t) { return m.l + (t - t0) / (t1 - t0) * innerW; };
+    var kpY = function (v) { return m.t + (9 - v) / 9 * kpH; };
+    var cloudTop = m.t + kpH + gap;
+    var cY = function (v) { return cloudTop + (100 - v) / 100 * cloudH; };
+    var p = [];
+
+    /* twilight background — chrome, not data */
+    var site = ss.site;
+    var step = 15 * 60000;
+    for (var t = t0; t < t1; t += step) {
+      var alt = A.sunAltitude(t + step / 2, site.lat, site.lon);
+      var fill = alt > -6 ? 'rgba(120,150,200,0.14)'
+        : alt > -12 ? 'rgba(90,120,180,0.09)'
+        : alt > -18 ? 'rgba(60,90,150,0.05)' : null;
+      if (fill) p.push('<rect x="' + x(t).toFixed(1) + '" y="' + m.t + '" width="' + (x(t + step) - x(t) + 0.6).toFixed(1) +
+        '" height="' + (kpH + gap + cloudH) + '" fill="' + fill + '"/>');
+    }
+
+    /* moon-up strip */
+    var moonBand = [];
+    for (var tm = t0; tm < t1; tm += step) {
+      var ms = A.moonState(tm + step / 2, site.lat, site.lon);
+      if (ms.altitude > 0) moonBand.push({ t: tm, a: ms.altitude, f: ms.fraction });
+    }
+    moonBand.forEach(function (b) {
+      var op = 0.12 + 0.5 * b.f * Math.min(1, b.a / 30);
+      p.push('<rect x="' + x(b.t).toFixed(1) + '" y="' + (m.t + 1) + '" width="' + (x(b.t + step) - x(b.t) + 0.6).toFixed(1) +
+        '" height="5" fill="rgba(226,214,170,' + op.toFixed(2) + ')"/>');
+    });
+    if (moonBand.length) {
+      p.push('<text x="' + (m.l + 4) + '" y="' + (m.t + 18) + '" font-size="10" fill="var(--ink-muted)">moon up</text>');
+    }
+
+    /* Kp gridlines + axis */
+    [0, 3, 5, 6, 7, 9].forEach(function (v) {
+      p.push('<line x1="' + m.l + '" y1="' + kpY(v) + '" x2="' + (W - m.r) + '" y2="' + kpY(v) + '" stroke="var(--grid)" stroke-width="1"/>');
+      p.push('<text x="' + (m.l - 7) + '" y="' + (kpY(v) + 3.5) + '" text-anchor="end" font-size="10" fill="var(--ink-muted)">' + v + '</text>');
+    });
+
+    /* Kp bars — 3-hour blocks, sequential fill by magnitude */
+    var seen = {};
+    hours.forEach(function (h) {
+      if (h.kp === null) return;
+      var blockStart = h.t - (h.t % (3 * MS_HOUR));
+      if (seen[blockStart]) return;
+      seen[blockStart] = 1;
+      var x0 = x(Math.max(blockStart, t0)) + 1, x1 = x(Math.min(blockStart + 3 * MS_HOUR, t1)) - 1;
+      if (x1 <= x0) return;
+      var yTop = kpY(h.kp);
+      p.push('<rect x="' + x0.toFixed(1) + '" y="' + yTop.toFixed(1) + '" width="' + (x1 - x0).toFixed(1) +
+        '" height="' + Math.max(1, kpY(0) - yTop).toFixed(1) + '" rx="4" fill="' + kpColor(h.kp) + '"' +
+        (h.kpObserved ? '' : ' opacity="0.92"') + '/>');
+      p.push('<text x="' + ((x0 + x1) / 2).toFixed(1) + '" y="' + (yTop - 5).toFixed(1) +
+        '" text-anchor="middle" font-size="10.5" fill="var(--ink-2)">' + h.kp.toFixed(1) + '</text>');
+    });
+    /* the Kp this site needs — drawn over the bars so you can see what clears them */
+    [{ v: site.kpCamera, label: narrow ? 'cam ' : 'camera ' }, { v: site.kpEye, label: narrow ? 'eye ' : 'naked eye ' }].forEach(function (th) {
+      p.push('<line x1="' + m.l + '" y1="' + kpY(th.v) + '" x2="' + (W - m.r) + '" y2="' + kpY(th.v) +
+        '" stroke="var(--aurora)" stroke-width="1.5" stroke-dasharray="5 4"/>');
+      var tx = th.label + th.v.toFixed(1);
+      p.push('<rect x="' + (W - m.r - 8 - tx.length * 5.6) + '" y="' + (kpY(th.v) - 13) + '" width="' + (tx.length * 5.6 + 6) +
+        '" height="12" rx="3" fill="var(--surface-1)" opacity="0.92"/>');
+      p.push('<text x="' + (W - m.r - 5) + '" y="' + (kpY(th.v) - 4) + '" text-anchor="end" font-size="10" fill="var(--aurora)">' + tx + '</text>');
+    });
+    p.push('<line x1="' + m.l + '" y1="' + kpY(0) + '" x2="' + (W - m.r) + '" y2="' + kpY(0) + '" stroke="var(--baseline)" stroke-width="1"/>');
+    p.push('<text x="' + m.l + '" y="' + (m.t - 10) + '" font-size="10.5" fill="var(--ink-muted)">' + (narrow ? 'Planetary Kp — 3 h blocks' : 'Planetary Kp forecast — 3-hour blocks') + '</text>');
+
+    /* cloud / obstruction panel */
+    [0, 50, 100].forEach(function (v) {
+      p.push('<line x1="' + m.l + '" y1="' + cY(v) + '" x2="' + (W - m.r) + '" y2="' + cY(v) + '" stroke="var(--grid)" stroke-width="1"/>');
+      p.push('<text x="' + (m.l - 7) + '" y="' + (cY(v) + 3.5) + '" text-anchor="end" font-size="10" fill="var(--ink-muted)">' + v + '</text>');
+    });
+    var pts = hours.filter(function (h) { return h.obstruction !== null; });
+    if (pts.length) {
+      var line = pts.map(function (h, i) { return (i ? 'L' : 'M') + x(h.t).toFixed(1) + ',' + cY(h.obstruction).toFixed(1); }).join('');
+      var area = line + 'L' + x(pts[pts.length - 1].t).toFixed(1) + ',' + cY(0) + 'L' + x(pts[0].t).toFixed(1) + ',' + cY(0) + 'Z';
+      p.push('<path d="' + area + '" fill="var(--occlusion-fill)"/>');
+      p.push('<path d="' + line + '" fill="none" stroke="var(--occlusion-line)" stroke-width="2" stroke-linejoin="round"/>');
+    } else {
+      p.push('<text x="' + (m.l + 8) + '" y="' + cY(50) + '" font-size="11" fill="var(--ink-muted)">no cloud data for this range</text>');
+    }
+    p.push('<text x="' + m.l + '" y="' + (cloudTop - 10) + '" font-size="10.5" fill="var(--ink-muted)">' + (narrow ? 'Horizon blocked, %' : 'Northern horizon blocked, % — low cloud weighted heaviest') + '</text>');
+
+    /* x axis */
+    for (var ta = Math.ceil(t0 / MS_HOUR) * MS_HOUR; ta < t1; ta += MS_HOUR) {
+      var lbl = fmtTime(ta);
+      if (!/^(\d\d):00$/.test(lbl)) continue;
+      var hh = +lbl.slice(0, 2);
+      if (hh % 2 !== 0) continue;
+      p.push('<text x="' + x(ta).toFixed(1) + '" y="' + (H - 6) + '" text-anchor="middle" font-size="10.5" fill="var(--ink-muted)">' + lbl + '</text>');
+    }
+
+    /* hover layer */
+    p.push('<rect id="tl-hit" x="' + m.l + '" y="' + m.t + '" width="' + innerW + '" height="' + (kpH + gap + cloudH) + '" fill="transparent"/>');
+    p.push('<line id="tl-cross" x1="0" y1="' + m.t + '" x2="0" y2="' + (m.t + kpH + gap + cloudH) + '" stroke="var(--ink-muted)" stroke-width="1" opacity="0"/>');
+
+    host.innerHTML = '<svg viewBox="0 0 ' + W + ' ' + H + '" height="' + H + '" role="img" aria-label="Kp forecast and cloud cover through the night">' +
+      p.join('') + '</svg><div class="tooltip" id="tl-tip"></div>';
+
+    $('timeline-legend').innerHTML =
+      '<span><i class="swatch" style="background:var(--kp-3)"></i>Kp forecast</span>' +
+      '<span><i class="swatch" style="background:var(--occlusion-fill);border:1px solid var(--occlusion-line)"></i>Horizon blocked by cloud</span>' +
+      '<span><i class="swatch" style="background:rgba(90,120,180,0.5)"></i>Twilight (darker = deeper night)</span>' +
+      '<span><i class="swatch" style="background:rgba(226,214,170,0.6)"></i>Moon above the horizon</span>' +
+      '<span><i class="swatch" style="background:var(--aurora);height:2px;border-radius:0"></i>Kp needed at ' + esc(site.short) + '</span>';
+
+    wireHover(host, hours, x, m, innerW, W);
+  }
+
+  function wireHover(host, hours, x, m, innerW, W) {
+    var svg = host.querySelector('svg');
+    var tip = $('tl-tip');
+    var cross = host.querySelector('#tl-cross');
+    if (!svg || !tip) return;
+    function move(ev) {
+      var r = svg.getBoundingClientRect();
+      var px = (ev.touches ? ev.touches[0].clientX : ev.clientX) - r.left;
+      var scale = W / r.width;
+      var sx = px * scale;
+      var best = null, bestD = 1e9;
+      hours.forEach(function (h) {
+        var d = Math.abs(x(h.t) - sx);
+        if (d < bestD) { bestD = d; best = h; }
+      });
+      if (!best) return;
+      cross.setAttribute('x1', x(best.t)); cross.setAttribute('x2', x(best.t));
+      cross.setAttribute('opacity', '0.55');
+      var c = best.cloud || {};
+      var rows = [
+        ['Kp', best.kp !== null ? best.kp.toFixed(2) + (best.kpObserved ? ' (observed)' : '') : '—'],
+        ['Horizon blocked', best.obstruction !== null ? Math.round(best.obstruction) + '%' : '—'],
+        ['Cloud low / mid / high', [c.low, c.mid, c.high].map(function (v) { return v === null || v === undefined ? '—' : v + '%'; }).join(' / ')],
+        ['Temperature', c.temp !== null && c.temp !== undefined ? c.temp.toFixed(0) + ' °C' : '—'],
+        ['Wind', c.wind !== null && c.wind !== undefined ? Math.round(c.wind) + ' km/h' : '—']
+      ];
+      tip.innerHTML = '<b>' + fmtTime(best.t) + '</b>' + rows.map(function (r2) {
+        return '<div class="tt-row"><span>' + r2[0] + '</span><b>' + r2[1] + '</b></div>';
+      }).join('');
+      tip.style.opacity = '1';
+      var left = (x(best.t) / scale) + 14;
+      if (left + 190 > r.width) left = (x(best.t) / scale) - 190;
+      tip.style.left = Math.max(4, left) + 'px';
+      tip.style.top = '14px';
+    }
+    svg.addEventListener('mousemove', move);
+    svg.addEventListener('touchmove', move, { passive: true });
+    svg.addEventListener('mouseleave', function () { tip.style.opacity = '0'; cross.setAttribute('opacity', '0'); });
+  }
+
+  function renderHourTable(night, ss) {
+    var rows = ss.hours.map(function (h) {
+      var c = h.cloud || {};
+      return '<tr' + (h.dark ? '' : ' style="color:var(--ink-muted)"') + '><td>' + fmtTime(h.t) + (h.dark ? '' : ' <span style="font-size:11px">twilight</span>') + '</td><td class="num">' + (h.kp !== null ? h.kp.toFixed(2) : '—') + '</td>' +
+        '<td class="num">' + (h.obstruction !== null ? Math.round(h.obstruction) + '%' : '—') + '</td>' +
+        '<td class="num">' + (c.low === null || c.low === undefined ? '—' : c.low) + '</td>' +
+        '<td class="num">' + (c.mid === null || c.mid === undefined ? '—' : c.mid) + '</td>' +
+        '<td class="num">' + (c.high === null || c.high === undefined ? '—' : c.high) + '</td>' +
+        '<td class="num">' + (c.temp === null || c.temp === undefined ? '—' : c.temp.toFixed(0) + '°') + '</td></tr>';
+    }).join('');
+    $('hour-table').innerHTML = '<table><thead><tr><th>Time</th><th class="num">Kp</th><th class="num">Blocked</th>' +
+      '<th class="num">Low</th><th class="num">Mid</th><th class="num">High</th><th class="num">Temp</th></tr></thead><tbody>' + rows + '</tbody></table>';
+  }
+
+  /* ---------------- site comparison ---------------- */
+  function renderSitesTable() {
+    var n = currentNight();
+    if (!n) return;
+    $('sites-title').textContent = 'Where to stand — ' + A.fmtNightLabel(n.dateKey, n.index, TZ);
+    var rows = n.sites.map(function (s) {
+      var v = A.verdictFor(s.score);
+      var win = s.bestWindow;
+      return '<tr class="' + (s.site.trip ? 'trip-site' : '') + (s.siteId === state.selectedSite ? ' sel' : '') + '">' +
+        '<td><b>' + esc(s.site.short) + '</b><div style="color:var(--ink-muted);font-size:12px">' + esc(s.site.region) + ' · Bortle ' + s.site.bortle + '</div></td>' +
+        '<td class="num"><span class="minibar"><i style="width:' + Math.max(2, s.score) + '%"></i></span>' + s.score + '</td>' +
+        '<td><span class="pill ' + v.key + '">' + VERDICT_ICON[v.key] + ' ' + v.label + '</span></td>' +
+        '<td class="num">' + s.site.kpCamera.toFixed(1) + ' / ' + s.site.kpEye.toFixed(1) + '</td>' +
+        '<td class="num">' + (s.cloudBest !== null ? s.cloudBest + '%' : '—') + '</td>' +
+        '<td>' + (win ? fmtTime(win.start) + '–' + fmtTime(win.end) : '—') + '</td>' +
+        '<td style="max-width:250px;color:var(--ink-2);font-size:12.5px">' + esc(s.site.travel) + '</td></tr>';
+    }).join('');
+    $('sites-table').innerHTML = '<table><thead><tr><th>Site</th><th class="num">Score</th><th>Verdict</th>' +
+      '<th class="num">Kp cam / eye</th><th class="num">Blocked at best</th><th>Prime window</th><th>Getting there</th></tr></thead><tbody>' + rows + '</tbody></table>';
+  }
+
+  /* ---------------- alerts ---------------- */
+  function renderAlerts() {
+    var list = (state.alerts || []).slice(0, 5);
+    if (!list.length) { $('alerts').innerHTML = '<div style="color:var(--ink-muted);font-size:13.5px">No geomagnetic alerts posted recently.</div>'; return; }
+    $('alerts').innerHTML = list.map(function (a) {
+      return '<div class="alert-item"><div><b>' + esc(a.headline || 'SWPC notice') + '</b></div>' +
+        '<div class="at">' + fmtDay(a.issued) + ' ' + fmtTime(a.issued) + ' · ' + ago(a.issued) + '</div>' +
+        '<pre>' + esc((a.message || '').trim()) + '</pre></div>';
+    }).join('');
+  }
+
+  /* ---------------- method ---------------- */
+  function renderMethod() {
+    $('method').innerHTML =
+      '<p style="margin-top:0;font-size:13.5px;color:var(--ink-2)">Each night gets one number per site. It is a weighted geometric mean, so a zero anywhere is fatal — a G4 storm behind a solid deck of stratus still scores nothing.</p>' +
+      '<div class="scroll-x"><table><thead><tr><th>Ingredient</th><th>Weight</th><th>What it means</th></tr></thead><tbody>' +
+      '<tr><td>Geomagnetic</td><td>0.6</td><td>Peak forecast Kp during the dark window, compared against the Kp this particular site needs. Lauwersoog and Texel look out over water with no light dome, so they cash in a full Kp point earlier than Amsterdam.</td></tr>' +
+      '<tr><td>Sky</td><td>0.4</td><td>Cloud blocking the northern horizon: low cloud ×0.55, mid ×0.30, high ×0.15, and fog (visibility under 2 km) overrides everything. Scored 55% on the clearest hour and 45% on the median, because you only need one good gap.</td></tr>' +
+      '<tr><td>Darkness</td><td>×0.45–1.0</td><td>Hours with the sun below −12°. From mid-May to late July the Netherlands never gets there, which is why June nights cap out low no matter what the sun does.</td></tr>' +
+      '<tr><td>Moon</td><td>×0.80–1.0</td><td>Illuminated fraction × the share of the dark window the moon is actually up. A small penalty: aurora outshines moonlight, faint arcs do not.</td></tr>' +
+      '</tbody></table></div>' +
+      '<p style="font-size:13.5px;color:var(--ink-2)">Verdicts: <b>GO</b> 70+, <b>WATCH</b> 50–69, <b>SLIM</b> 30–49, <b>NO</b> below 30. ' +
+      'The Kp forecast comes in 3-hour blocks and is a planetary average — a substorm can fire an hour early or never fire at all. ' +
+      'When you are already outside, the panel at the top is what matters: Bz below −5 nT held for half an hour is the signal that something is about to happen.</p>';
+  }
+
+  /* ---------------- notifications ---------------- */
+  function maybeNotify() {
+    try {
+      if (!('Notification' in window) || Notification.permission !== 'granted') return;
+      var s = A.summarise(state.nights, TZ);
+      if (!s.alert) return;
+      var key = 'aurora-notified-' + s.night.dateKey;
+      if (localStorage.getItem(key)) return;
+      localStorage.setItem(key, '1');
+      new Notification('Aurora conditions are lining up', { body: s.text, tag: key });
+    } catch (e) { /* storage or notifications blocked — not important */ }
+  }
+
+  $('notify-btn').addEventListener('click', function () {
+    if (!('Notification' in window)) { alert('This browser cannot show notifications.'); return; }
+    Notification.requestPermission().then(function (p) {
+      $('notify-btn').textContent = p === 'granted' ? 'Alerts on' : 'Alerts blocked';
+      if (p === 'granted') maybeNotify();
+    });
+  });
+  if ('Notification' in window && Notification.permission === 'granted') $('notify-btn').textContent = 'Alerts on';
+
+  $('refresh-btn').addEventListener('click', function () { load(); });
+
+  /* ---------------- lifecycle: refresh every 15 min, rebuild every day ---------------- */
+  var lastDay = A.localDateKey(Date.now(), TZ);
+  setInterval(function () {
+    var today = A.localDateKey(Date.now(), TZ);
+    if (today !== lastDay) { lastDay = today; state.selectedNight = 0; load(); return; }
+    if (Date.now() - state.fetchedAt > REFRESH_MS) load();
+  }, 60000);
+  document.addEventListener('visibilitychange', function () {
+    if (!document.hidden && Date.now() - state.fetchedAt > REFRESH_MS) load();
+  });
+  var resizeTimer;
+  window.addEventListener('resize', function () {
+    clearTimeout(resizeTimer);
+    resizeTimer = setTimeout(function () {
+      if (state.nights.length) { renderBzChart(); renderTimeline(); }
+    }, 180);
+  });
+
+  load();
+})();
+</script>
+</body>
+</html>
