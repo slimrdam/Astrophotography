@@ -205,6 +205,49 @@
   details[open] > summary { color: var(--ink); margin-bottom: 8px; }
   a { color: #7fb2f2; }
   footer { color: var(--ink-muted); font-size: 12.5px; margin-top: 26px; line-height: 1.7; }
+
+  /* ---------- glossary terms & popovers ---------- */
+  .term {
+    font: inherit; color: inherit; background: none; border: 0; padding: 0;
+    border-bottom: 1px dashed var(--ink-muted); cursor: help; line-height: inherit;
+  }
+  .term:hover, .term:focus-visible { border-bottom-color: var(--aurora); color: var(--aurora); outline: none; }
+  th .term, .tile .k .term { border-bottom-color: rgba(255,255,255,0.28); }
+  .pop {
+    position: absolute; z-index: 40; width: min(320px, calc(100vw - 32px));
+    background: var(--surface-3); border: 1px solid var(--hairline);
+    border-radius: 12px; padding: 14px 16px; box-shadow: 0 14px 40px rgba(0,0,0,.6);
+    font-size: 13.5px; line-height: 1.55; color: var(--ink-2);
+  }
+  .pop h3 { margin: 0 0 6px; font-size: 14px; color: var(--ink); font-weight: 650; }
+  .pop .rule { margin: 9px 0 0; padding-top: 9px; border-top: 1px solid var(--grid); color: var(--aurora); font-size: 13px; }
+  .pop .close {
+    position: absolute; top: 8px; right: 10px; background: none; border: 0;
+    color: var(--ink-muted); font-size: 18px; line-height: 1; cursor: pointer; padding: 4px;
+  }
+  .pop-backdrop { position: fixed; inset: 0; z-index: 39; background: rgba(5,7,12,0.55); }
+  @media (max-width: 560px) {
+    .pop { position: fixed; left: 8px; right: 8px; bottom: 8px; top: auto; width: auto; padding: 18px 16px 20px; }
+  }
+
+  /* ---------- map ---------- */
+  .map-row { display: grid; grid-template-columns: minmax(260px, 400px) 1fr; gap: 20px; align-items: start; }
+  @media (max-width: 760px) { .map-row { grid-template-columns: 1fr; } }
+  #site-map svg { width: 100%; height: auto; }
+  .map-pin { cursor: pointer; }
+  .map-pin:hover circle.hit { opacity: 0.18; }
+  .detail h3 { margin: 0; font-size: 17px; font-weight: 650; letter-spacing: -0.01em; }
+  .detail .where { color: var(--ink-muted); font-size: 12.5px; margin-top: 3px; }
+  .detail dl { display: grid; grid-template-columns: auto 1fr; gap: 7px 16px; margin: 14px 0 0; font-size: 13.5px; }
+  .detail dt { color: var(--ink-muted); }
+  .detail dd { margin: 0; color: var(--ink); font-variant-numeric: tabular-nums; }
+  .detail p.travel { font-size: 13.5px; color: var(--ink-2); margin: 14px 0 0; }
+  .detail .links { margin-top: 14px; display: flex; gap: 10px; flex-wrap: wrap; }
+  .detail .links a {
+    font-size: 13px; text-decoration: none; padding: 6px 12px; border-radius: 999px;
+    border: 1px solid var(--hairline); color: var(--ink-2); background: var(--surface-2);
+  }
+  .detail .links a:hover { color: var(--ink); border-color: var(--ink-muted); }
   .skeleton { color: var(--ink-muted); padding: 28px 0; text-align: center; }
   @media (max-width: 560px) {
     .hero-score { text-align: left; }
@@ -262,9 +305,14 @@
   <section class="card">
     <div class="card-head">
       <h2 id="sites-title">Where to stand</h2>
-      <span class="status-line">Scored for the selected night</span>
+      <span class="status-line">Tap a pin or a row to load that site</span>
     </div>
-    <div class="scroll-x" id="sites-table"></div>
+    <div class="map-row">
+      <div class="chart-wrap" id="site-map"></div>
+      <div class="detail" id="site-detail"></div>
+    </div>
+    <div class="legend" id="map-legend"></div>
+    <div class="scroll-x" id="sites-table" style="margin-top:16px"></div>
   </section>
 
   <section class="card">
@@ -277,15 +325,23 @@
     <div id="method"></div>
   </section>
 
+  <section class="card">
+    <h2>Every term on this page</h2>
+    <div id="glossary"></div>
+  </section>
+
   <footer>
     <div id="footer-status"></div>
     <p>Sources: <a href="https://www.swpc.noaa.gov/">NOAA SWPC</a> (planetary Kp forecast, 1-minute estimated Kp, DSCOVR/ACE solar wind, OVATION aurora model, alerts) ·
-    <a href="https://open-meteo.com/">Open-Meteo</a> (hourly cloud layers, visibility, wind). Sun and moon geometry computed locally.
+    <a href="https://open-meteo.com/">Open-Meteo</a> (hourly cloud layers, visibility, wind) ·
+    map boundaries from <a href="https://cartomap.github.io/nl/">Cartomap</a>, derived from CBS open data.
+    Sun and moon geometry computed locally.
     Ferry times: <a href="https://www.teso.nl/en">TESO Texel</a>.</p>
   </footer>
 </div>
 
 <script src="assets/aurora-core.js"></script>
+<script src="assets/nl-outline.js"></script>
 <script>
 (function () {
   'use strict';
@@ -327,6 +383,60 @@
     return 'var(--kp-5)';
   }
   var VERDICT_ICON = { go: '●', watch: '◐', slim: '○', no: '·' };
+
+  /* ---------------- glossary terms ---------------- */
+  // T('bz', 'Bz') renders the label as a button that explains itself.
+  function T(id, label) {
+    var g = A.GLOSSARY[id];
+    if (!g) return esc(label);
+    return '<button type="button" class="term" data-term="' + id + '" title="' + esc(g.term) + '">' +
+      esc(label === undefined ? g.term : label) + '</button>';
+  }
+
+  var popEl = null, popBackdrop = null;
+  function closePop() {
+    if (popEl) { popEl.remove(); popEl = null; }
+    if (popBackdrop) { popBackdrop.remove(); popBackdrop = null; }
+  }
+  function openPop(anchor, id) {
+    closePop();
+    var g = A.GLOSSARY[id];
+    if (!g) return;
+    var narrow = window.innerWidth <= 560;
+    popEl = document.createElement('div');
+    popEl.className = 'pop';
+    popEl.setAttribute('role', 'dialog');
+    popEl.setAttribute('aria-label', g.term);
+    popEl.innerHTML = '<button class="close" type="button" aria-label="Close">×</button>' +
+      '<h3>' + esc(g.term) + '</h3><div>' + esc(g.body) + '</div>' +
+      (g.rule ? '<p class="rule">' + esc(g.rule) + '</p>' : '');
+    if (narrow) {
+      popBackdrop = document.createElement('div');
+      popBackdrop.className = 'pop-backdrop';
+      popBackdrop.addEventListener('click', closePop);
+      document.body.appendChild(popBackdrop);
+      document.body.appendChild(popEl);
+    } else {
+      document.body.appendChild(popEl);
+      var r = anchor.getBoundingClientRect();
+      var w = popEl.offsetWidth, hgt = popEl.offsetHeight;
+      var left = r.left + window.scrollX + r.width / 2 - w / 2;
+      left = Math.max(10 + window.scrollX, Math.min(left, window.scrollX + window.innerWidth - w - 10));
+      var top = r.bottom + window.scrollY + 9;
+      // flip above when it would fall off the bottom of the window
+      if (r.bottom + hgt + 20 > window.innerHeight) top = r.top + window.scrollY - hgt - 9;
+      popEl.style.left = left + 'px';
+      popEl.style.top = Math.max(window.scrollY + 8, top) + 'px';
+    }
+    popEl.querySelector('.close').addEventListener('click', closePop);
+  }
+  document.addEventListener('click', function (ev) {
+    var t = ev.target.closest ? ev.target.closest('[data-term]') : null;
+    if (t) { ev.preventDefault(); ev.stopPropagation(); openPop(t, t.getAttribute('data-term')); return; }
+    if (popEl && !ev.target.closest('.pop')) closePop();
+  });
+  document.addEventListener('keydown', function (ev) { if (ev.key === 'Escape') closePop(); });
+  window.addEventListener('resize', closePop);
 
   /* ---------------- loading ---------------- */
   function load() {
@@ -405,9 +515,12 @@
     renderNow();
     renderNights();
     renderTimeline();
+    renderMap();
+    renderDetail();
     renderSitesTable();
     renderAlerts();
     renderMethod();
+    renderGlossary();
     setStatus('Data fetched ' + ago(state.fetchedAt) + '. Auto-refresh every 15 minutes; the outlook rebuilds itself every day.');
   }
 
@@ -428,12 +541,12 @@
     var w = night.window;
     var moonPct = Math.round(w.moonFraction * 100);
     var facts = [];
-    facts.push('<span>Dark <b>' + fmtTime(w.start) + '–' + fmtTime(w.end) + '</b>' +
+    facts.push('<span>' + T('darkwindow', 'Dark') + ' <b>' + fmtTime(w.start) + '–' + fmtTime(w.end) + '</b>' +
       (w.darkHours ? ' (' + w.darkHours.toFixed(1) + ' h below −12°)' : '') + '</span>');
-    facts.push('<span>Kp peak <b>' + (b.kpMax !== null ? b.kpMax.toFixed(1) : '—') + '</b>' +
-      ' · needs <b>' + b.site.kpCamera.toFixed(1) + '</b> for a camera, <b>' + b.site.kpEye.toFixed(1) + '</b> for the eye here</span>');
-    facts.push('<span>Northern horizon blocked <b>' + (b.cloudBest !== null ? b.cloudBest + '%' : '—') + '</b> at best</span>');
-    facts.push('<span>Moon <b>' + moonPct + '%</b>' + (w.moonUpFraction > 0.05 ? ', up ' + Math.round(w.moonUpFraction * 100) + '% of the dark window' : ', below the horizon') + '</span>');
+    facts.push('<span>' + T('kp', 'Kp peak') + ' <b>' + (b.kpMax !== null ? b.kpMax.toFixed(1) : '—') + '</b>' +
+      ' · ' + T('kpneed', 'needs') + ' <b>' + b.site.kpCamera.toFixed(1) + '</b> for a camera, <b>' + b.site.kpEye.toFixed(1) + '</b> for the eye here</span>');
+    facts.push('<span>' + T('blocked', 'Northern horizon blocked') + ' <b>' + (b.cloudBest !== null ? b.cloudBest + '%' : '—') + '</b> at best</span>');
+    facts.push('<span>' + T('moon', 'Moon') + ' <b>' + moonPct + '%</b>' + (w.moonUpFraction > 0.05 ? ', up ' + Math.round(w.moonUpFraction * 100) + '% of the dark window' : ', below the horizon') + '</span>');
 
     var trip = '';
     if (night.tripWorthIt) {
@@ -450,11 +563,11 @@
           '<div>' +
             '<div class="verdict ' + v.key + '"><span class="icon">' + VERDICT_ICON[v.key] + '</span>' + v.label +
               ' · <span style="color:var(--ink)">' + esc(A.fmtNightLabel(night.dateKey, night.index, TZ)) + '</span></div>' +
-            '<div class="hero-when">' + esc(v.blurb) + ' Best spot: <b style="color:var(--ink)">' + esc(b.site.name) + '</b>' +
+            '<div class="hero-when">' + T('verdict', v.blurb) + ' Best spot: <b style="color:var(--ink)">' + esc(b.site.name) + '</b>' +
               (win ? ', prime window ' + fmtTime(win.start) + '–' + fmtTime(win.end) : '') + '.</div>' +
           '</div>' +
           '<div class="hero-score"><div class="n" style="color:' + (v.key === 'go' ? 'var(--good)' : v.key === 'watch' ? 'var(--warning)' : 'var(--ink)') + '">' +
-            b.score + '</div><div class="lbl">score / 100</div></div>' +
+            b.score + '</div><div class="lbl">' + T('score', 'score') + ' / 100</div></div>' +
         '</div>' +
         '<div class="hero-facts">' + facts.join('') + '</div>' +
         trip +
@@ -466,34 +579,34 @@
     var w = state.wind || {};
     var tiles = [];
     var kp = state.kpNow ? state.kpNow.kp : null;
-    tiles.push(tile('Kp now', kp === null ? '—' : kp.toFixed(1), kp === null ? 'estimated planetary K' : (kp >= 5 ? 'storm level G' + Math.max(1, Math.round(kp - 4)) : 'quiet to unsettled')));
+    tiles.push(tile(T('kp', 'Kp now'), kp === null ? '—' : kp.toFixed(1), kp === null ? 'estimated planetary K' : (kp >= 5 ? 'storm level G' + Math.max(1, Math.round(kp - 4)) : 'quiet to unsettled')));
     var bz = w.bzMean30 !== null && w.bzMean30 !== undefined ? w.bzMean30 : w.bz;
-    tiles.push(tile('Bz (30 min)', bz === null || bz === undefined ? '—' : bz.toFixed(1) + '<small>nT</small>',
+    tiles.push(tile(T('bz', 'Bz') + ' (30 min)', bz === null || bz === undefined ? '—' : bz.toFixed(1) + '<small>nT</small>',
       bz === null || bz === undefined ? '' : (bz < -5 ? 'strongly south — the door is open' : bz < 0 ? 'south — favourable' : 'north — energy stays out'),
       bz !== null && bz !== undefined && bz < -5 ? 'neg' : ''));
-    tiles.push(tile('Solar wind', w.speed ? Math.round(w.speed) + '<small>km/s</small>' : '—',
+    tiles.push(tile(T('speed', 'Solar wind'), w.speed ? Math.round(w.speed) + '<small>km/s</small>' : '—',
       w.speed ? (w.speed > 600 ? 'fast stream' : w.speed > 450 ? 'elevated' : 'ambient') : ''));
-    tiles.push(tile('Density', w.density !== null && w.density !== undefined ? w.density.toFixed(1) + '<small>p/cm³</small>' : '—', 'protons'));
-    tiles.push(tile('Bt', w.bt !== null && w.bt !== undefined ? w.bt.toFixed(1) + '<small>nT</small>' : '—', 'total field'));
+    tiles.push(tile(T('density', 'Density'), w.density !== null && w.density !== undefined ? w.density.toFixed(1) + '<small>p/cm³</small>' : '—', 'protons'));
+    tiles.push(tile(T('bt', 'Bt'), w.bt !== null && w.bt !== undefined ? w.bt.toFixed(1) + '<small>nT</small>' : '—', 'total field'));
     if (state.scales && state.scales.g !== null) {
-      tiles.push(tile('NOAA storm level', 'G' + state.scales.g,
+      tiles.push(tile(T('gscale', 'NOAA storm level'), 'G' + state.scales.g,
         state.scales.text && state.scales.text !== 'none' ? state.scales.text : 'no storm in progress',
         state.scales.g >= 2 ? 'neg' : ''));
     }
     if (state.ovation) {
-      tiles.push(tile('Oval to the north', Math.round(state.ovation.north) + '<small>%</small>',
+      tiles.push(tile(T('oval', 'Oval to the north'), Math.round(state.ovation.north) + '<small>%</small>',
         'OVATION 54–66°N, over the North Sea'));
     }
     $('now-tiles').innerHTML = tiles.join('');
-    $('now-time').textContent = !w.time ? 'solar wind feed unavailable'
+    $('now-time').innerHTML = !w.time ? 'solar wind feed unavailable'
       : w.propagated
-        ? 'Arriving at Earth ' + fmtTime(w.time) + ' (' + ago(w.time) + ') — measured at L1 ' + fmtTime(w.measuredAt)
+        ? T('propagated', 'Arriving at Earth') + ' ' + fmtTime(w.time) + ' (' + ago(w.time) + ') — measured at L1 ' + fmtTime(w.measuredAt)
         : 'Measured ' + fmtTime(w.time) + ' (' + ago(w.time) + ')';
     renderBzChart();
   }
 
   function tile(k, v, note, cls) {
-    return '<div class="tile"><div class="k">' + esc(k) + '</div><div class="v ' + (cls || '') + '">' + v + '</div>' +
+    return '<div class="tile"><div class="k">' + k + '</div><div class="v ' + (cls || '') + '">' + v + '</div>' +
       (note ? '<div class="note">' + esc(note) + '</div>' : '') + '</div>';
   }
 
@@ -546,7 +659,7 @@
     Array.prototype.forEach.call(document.querySelectorAll('.night'), function (el) {
       el.addEventListener('click', function () {
         state.selectedNight = +el.getAttribute('data-night');
-        renderNights(); renderTimeline(); renderSitesTable();
+        renderNights(); renderTimeline(); renderSitesTable(); renderMap(); renderDetail();
       });
     });
   }
@@ -573,7 +686,7 @@
     Array.prototype.forEach.call(document.querySelectorAll('[data-site]'), function (el) {
       el.addEventListener('click', function () {
         state.selectedSite = el.getAttribute('data-site');
-        renderTimeline(); renderSitesTable();
+        renderTimeline(); renderSitesTable(); renderMap(); renderDetail();
       });
     });
 
@@ -692,11 +805,11 @@
       p.join('') + '</svg><div class="tooltip" id="tl-tip"></div>';
 
     $('timeline-legend').innerHTML =
-      '<span><i class="swatch" style="background:var(--kp-3)"></i>Kp forecast</span>' +
-      '<span><i class="swatch" style="background:var(--occlusion-fill);border:1px solid var(--occlusion-line)"></i>Horizon blocked by cloud</span>' +
-      '<span><i class="swatch" style="background:rgba(90,120,180,0.5)"></i>Twilight (darker = deeper night)</span>' +
-      '<span><i class="swatch" style="background:rgba(226,214,170,0.6)"></i>Moon above the horizon</span>' +
-      '<span><i class="swatch" style="background:var(--aurora);height:2px;border-radius:0"></i>Kp needed at ' + esc(site.short) + '</span>';
+      '<span><i class="swatch" style="background:var(--kp-3)"></i>' + T('kp', 'Kp forecast') + '</span>' +
+      '<span><i class="swatch" style="background:var(--occlusion-fill);border:1px solid var(--occlusion-line)"></i>' + T('blocked', 'Horizon blocked by cloud') + '</span>' +
+      '<span><i class="swatch" style="background:rgba(90,120,180,0.5)"></i>' + T('twilight', 'Twilight') + ' (darker = deeper night)</span>' +
+      '<span><i class="swatch" style="background:rgba(226,214,170,0.6)"></i>' + T('moon', 'Moon above the horizon') + '</span>' +
+      '<span><i class="swatch" style="background:var(--aurora);height:2px;border-radius:0"></i>' + T('kpneed', 'Kp needed at ' + site.short) + '</span>';
 
     wireHover(host, hours, x, m, innerW, W);
   }
@@ -751,7 +864,7 @@
         '<td class="num">' + (c.high === null || c.high === undefined ? '—' : c.high) + '</td>' +
         '<td class="num">' + (c.temp === null || c.temp === undefined ? '—' : c.temp.toFixed(0) + '°') + '</td></tr>';
     }).join('');
-    $('hour-table').innerHTML = '<table><thead><tr><th>Time</th><th class="num">Kp</th><th class="num">Blocked</th>' +
+    $('hour-table').innerHTML = '<table><thead><tr><th>Time</th><th class="num">' + T('kp', 'Kp') + '</th><th class="num">' + T('blocked', 'Blocked') + '</th>' +
       '<th class="num">Low</th><th class="num">Mid</th><th class="num">High</th><th class="num">Temp</th></tr></thead><tbody>' + rows + '</tbody></table>';
   }
 
@@ -763,7 +876,7 @@
     var rows = n.sites.map(function (s) {
       var v = A.verdictFor(s.score);
       var win = s.bestWindow;
-      return '<tr class="' + (s.site.trip ? 'trip-site' : '') + (s.siteId === state.selectedSite ? ' sel' : '') + '">' +
+      return '<tr data-row-site="' + s.siteId + '" style="cursor:pointer" class="' + (s.site.trip ? 'trip-site' : '') + (s.siteId === state.selectedSite ? ' sel' : '') + '">' +
         '<td><b>' + esc(s.site.short) + '</b><div style="color:var(--ink-muted);font-size:12px">' + esc(s.site.region) + ' · Bortle ' + s.site.bortle + '</div></td>' +
         '<td class="num"><span class="minibar"><i style="width:' + Math.max(2, s.score) + '%"></i></span>' + s.score + '</td>' +
         '<td><span class="pill ' + v.key + '">' + VERDICT_ICON[v.key] + ' ' + v.label + '</span></td>' +
@@ -772,8 +885,171 @@
         '<td>' + (win ? fmtTime(win.start) + '–' + fmtTime(win.end) : '—') + '</td>' +
         '<td style="max-width:250px;color:var(--ink-2);font-size:12.5px">' + esc(s.site.travel) + '</td></tr>';
     }).join('');
-    $('sites-table').innerHTML = '<table><thead><tr><th>Site</th><th class="num">Score</th><th>Verdict</th>' +
-      '<th class="num">Kp cam / eye</th><th class="num">Blocked at best</th><th>Prime window</th><th>Getting there</th></tr></thead><tbody>' + rows + '</tbody></table>';
+    $('sites-table').innerHTML = '<table><thead><tr><th>Site</th><th class="num">' + T('score', 'Score') + '</th><th>' + T('verdict', 'Verdict') + '</th>' +
+      '<th class="num">' + T('kpneed', 'Kp cam / eye') + '</th><th class="num">' + T('blocked', 'Blocked at best') + '</th><th>' + T('primewindow', 'Prime window') + '</th><th>Getting there</th></tr></thead><tbody>' + rows + '</tbody></table>';
+    Array.prototype.forEach.call(document.querySelectorAll('[data-row-site]'), function (tr) {
+      tr.addEventListener('click', function (ev) {
+        if (ev.target.closest('[data-term]') || ev.target.closest('a')) return;
+        state.selectedSite = tr.getAttribute('data-row-site');
+        renderTimeline(); renderSitesTable(); renderMap(); renderDetail();
+      });
+    });
+  }
+
+  /* ---------------- map ---------------- */
+  // Label placement that keeps the six pins legible at 400 px wide.
+  var LABEL = {
+    texel:       { side: -1, dy: -2 },
+    callantsoog: { side: -1, dy: 4 },
+    lauwersoog:  { side: 1,  dy: -2 },
+    afsluitdijk: { side: 1,  dy: -4 },
+    houtribdijk: { side: 1,  dy: 4 },
+    amsterdam:   { side: 1,  dy: 4 }
+  };
+
+  function verdictColor(key) {
+    return key === 'go' ? 'var(--good)' : key === 'watch' ? 'var(--warning)'
+      : key === 'slim' ? 'var(--serious)' : 'var(--ink-muted)';
+  }
+
+  function renderMap() {
+    var host = $('site-map');
+    var outline = window.NL_OUTLINE;
+    var night = currentNight();
+    if (!host || !outline || !night) return;
+
+    var W = Math.max(240, host.clientWidth || 360);
+    // Cropped to the hunting grounds — Noord-Holland up to Groningen. The
+    // southern provinces are off-frame on purpose: no aurora business there.
+    var b = [3.30, 51.85, 7.25, 53.72];
+    var k = Math.cos((b[1] + b[3]) / 2 * Math.PI / 180);
+    var spanX = (b[2] - b[0]) * k, spanY = b[3] - b[1];
+    var pad = 0.045;
+    var padX = spanX * pad, padY = spanY * pad;
+    var scale = W / (spanX + 2 * padX);
+    var H = (spanY + 2 * padY) * scale;
+    function px(lon) { return ((lon - b[0]) * k + padX) * scale; }
+    function py(lat) { return ((b[3] - lat) + padY) * scale; }
+
+    var p = [];
+    p.push('<rect x="0" y="0" width="' + W + '" height="' + H + '" fill="#0c1018"/>');
+
+    // land — each province ring; shared borders read as a faint internal hairline
+    var d = outline.rings.map(function (ring) {
+      return 'M' + ring.map(function (c) { return px(c[0]).toFixed(1) + ',' + py(c[1]).toFixed(1); }).join('L') + 'Z';
+    }).join('');
+    p.push('<path d="' + d + '" fill="#1a2130" stroke="#2b3446" stroke-width="0.7" stroke-linejoin="round"/>');
+
+    // water labels
+    [['North Sea', 3.72, 52.60], ['Wadden Sea', 5.22, 53.36], ['IJsselmeer', 5.30, 52.72]].forEach(function (l) {
+      p.push('<text x="' + px(l[1]).toFixed(1) + '" y="' + py(l[2]).toFixed(1) +
+        '" font-size="9.5" fill="#59637a" letter-spacing="0.06em">' + l[0] + '</text>');
+    });
+
+    var sel = currentSiteScore();
+    // where you will be looking: a wedge to the north of the selected site
+    if (sel) {
+      var cx = px(sel.site.lon), cy = py(sel.site.lat), r = Math.min(W, H) * 0.34;
+      var a1 = -140 * Math.PI / 180, a2 = -40 * Math.PI / 180;
+      p.push('<path d="M' + cx.toFixed(1) + ',' + cy.toFixed(1) +
+        'L' + (cx + r * Math.cos(a1)).toFixed(1) + ',' + (cy + r * Math.sin(a1)).toFixed(1) +
+        'A' + r.toFixed(1) + ',' + r.toFixed(1) + ' 0 0 1 ' +
+        (cx + r * Math.cos(a2)).toFixed(1) + ',' + (cy + r * Math.sin(a2)).toFixed(1) + 'Z" ' +
+        'fill="url(#lookN)" opacity="0.5"/>');
+    }
+
+    // pins
+    night.sites.forEach(function (s) {
+      var x = px(s.site.lon), y = py(s.site.lat);
+      var v = A.verdictFor(s.score);
+      var isSel = s.siteId === state.selectedSite;
+      var lab = LABEL[s.siteId] || { side: 1, dy: 4 };
+      var side = lab.side;
+      // flip a label that would run off the edge at this width
+      var labW = s.site.short.length * 6.4 + 14;
+      if (side > 0 && x + labW > W - 4) side = -1;
+      else if (side < 0 && x - labW < 4) side = 1;
+      var lx = x + side * 11, ly = y + (lab.dy || 0);
+      p.push('<g class="map-pin" data-map-site="' + s.siteId + '" role="button" tabindex="0" ' +
+        'aria-label="' + esc(s.site.short) + ', score ' + s.score + '">' +
+        '<title>' + esc(s.site.short) + ' — ' + s.score + '/100</title>' +
+        '<circle class="hit" cx="' + x.toFixed(1) + '" cy="' + y.toFixed(1) + '" r="16" fill="var(--aurora)" opacity="0"/>' +
+        (isSel ? '<circle cx="' + x.toFixed(1) + '" cy="' + y.toFixed(1) + '" r="11" fill="none" stroke="' + verdictColor(v.key) + '" stroke-width="1.5" opacity="0.65"/>' : '') +
+        '<circle cx="' + x.toFixed(1) + '" cy="' + y.toFixed(1) + '" r="' + (isSel ? 6.5 : 5) + '" fill="' + verdictColor(v.key) + '" stroke="#0c1018" stroke-width="2"/>' +
+        '<text x="' + lx.toFixed(1) + '" y="' + ly.toFixed(1) + '" font-size="11" font-weight="' + (isSel ? '650' : '500') + '" ' +
+        'text-anchor="' + (side < 0 ? 'end' : 'start') + '" fill="' + (isSel ? 'var(--ink)' : 'var(--ink-2)') + '" ' +
+        'style="paint-order:stroke" stroke="#0c1018" stroke-width="3">' + esc(s.site.short) + '</text>' +
+        '<text x="' + lx.toFixed(1) + '" y="' + (ly + 12).toFixed(1) + '" font-size="10" ' +
+        'text-anchor="' + (side < 0 ? 'end' : 'start') + '" fill="var(--ink-muted)" ' +
+        'style="paint-order:stroke" stroke="#0c1018" stroke-width="3">' + s.score + '</text>' +
+        '</g>');
+    });
+
+    // compass
+    p.push('<g opacity="0.75"><line x1="' + (W - 22) + '" y1="34" x2="' + (W - 22) + '" y2="14" stroke="var(--ink-muted)" stroke-width="1.5"/>' +
+      '<path d="M' + (W - 22) + ',10 L' + (W - 26) + ',18 L' + (W - 18) + ',18 Z" fill="var(--ink-muted)"/>' +
+      '<text x="' + (W - 22) + '" y="47" font-size="10" text-anchor="middle" fill="var(--ink-muted)">N</text></g>');
+
+    host.innerHTML = '<svg viewBox="0 0 ' + W + ' ' + H + '" role="img" aria-label="Map of the Netherlands with the six observing sites, coloured by tonight’s score">' +
+      '<defs><radialGradient id="lookN" cx="50%" cy="100%" r="100%">' +
+      '<stop offset="0%" stop-color="var(--aurora)" stop-opacity="0.26"/>' +
+      '<stop offset="100%" stop-color="var(--aurora)" stop-opacity="0"/>' +
+      '</radialGradient></defs>' + p.join('') + '</svg>';
+
+    Array.prototype.forEach.call(host.querySelectorAll('[data-map-site]'), function (g) {
+      function pick() {
+        state.selectedSite = g.getAttribute('data-map-site');
+        renderTimeline(); renderSitesTable(); renderMap(); renderDetail();
+      }
+      g.addEventListener('click', pick);
+      g.addEventListener('keydown', function (ev) { if (ev.key === 'Enter' || ev.key === ' ') { ev.preventDefault(); pick(); } });
+    });
+
+    $('map-legend').innerHTML = A.VERDICTS.map(function (v) {
+      return '<span><i class="swatch" style="background:' + verdictColor(v.key) + '"></i>' + v.label + ' ' +
+        (v.min ? v.min + '+' : 'under 30') + '</span>';
+    }).join('') + '<span><i class="swatch" style="background:rgba(46,229,157,0.25)"></i>the northern sky you are watching</span>';
+  }
+
+  function renderDetail() {
+    var host = $('site-detail');
+    var night = currentNight();
+    var s = currentSiteScore();
+    if (!host || !s || !night) return;
+    var v = A.verdictFor(s.score);
+    var w = s.window || night.window;
+    var win = s.bestWindow;
+    var site = s.site;
+    host.innerHTML =
+      '<h3>' + esc(site.name) + (site.home ? ' <span style="font-weight:400;color:var(--ink-muted)">· home</span>' : '') + '</h3>' +
+      '<div class="where">' + esc(site.region) + ' · ' + site.lat.toFixed(3) + '°N ' + site.lon.toFixed(3) + '°E · ' +
+        T('bortle', 'Bortle ' + site.bortle) + '</div>' +
+      '<dl>' +
+        '<dt>' + T('score', 'Score') + '</dt><dd><b style="color:' + verdictColor(v.key) + '">' + s.score + '</b> / 100 · ' + v.label + '</dd>' +
+        '<dt>' + T('kpneed', 'Kp needed') + '</dt><dd>' + site.kpCamera.toFixed(1) + ' camera · ' + site.kpEye.toFixed(1) + ' naked eye</dd>' +
+        '<dt>' + T('kp', 'Kp forecast') + '</dt><dd>' + (s.kpMax !== null ? 'peaks at ' + s.kpMax.toFixed(1) : 'no forecast') + '</dd>' +
+        '<dt>' + T('blocked', 'Horizon') + '</dt><dd>' + (s.cloudBest !== null ? s.cloudBest + '% blocked at best, ' + s.cloudMedian + '% typical' : 'no cloud data') + '</dd>' +
+        '<dt>' + T('darkwindow', 'Dark') + '</dt><dd>' + fmtTime(w.start) + '–' + fmtTime(w.end) + '</dd>' +
+        '<dt>' + T('primewindow', 'Prime') + '</dt><dd>' + (win ? fmtTime(win.start) + '–' + fmtTime(win.end) : '—') + '</dd>' +
+      '</dl>' +
+      '<p class="travel">' + esc(site.travel) + '</p>' +
+      '<div class="links">' +
+        '<a href="https://www.google.com/maps/dir/?api=1&destination=' + site.lat + ',' + site.lon + '" target="_blank" rel="noopener">Directions</a>' +
+        '<a href="https://www.openstreetmap.org/?mlat=' + site.lat + '&mlon=' + site.lon + '#map=12/' + site.lat + '/' + site.lon + '" target="_blank" rel="noopener">Open map</a>' +
+        (site.id === 'texel' ? '<a href="https://www.teso.nl/en" target="_blank" rel="noopener">Ferry times</a>' : '') +
+      '</div>';
+  }
+
+  function renderGlossary() {
+    var ids = Object.keys(A.GLOSSARY);
+    $('glossary').innerHTML =
+      '<p style="margin-top:0;font-size:13.5px;color:var(--ink-2)">Every dotted term on this page opens the same explanation where it stands. Here they all are at once.</p>' +
+      ids.map(function (id) {
+        var g = A.GLOSSARY[id];
+        return '<details><summary><b style="color:var(--ink)">' + esc(g.term) + '</b></summary>' +
+          '<p style="margin:2px 0 10px">' + esc(g.body) +
+          (g.rule ? '<br><span style="color:var(--aurora)">' + esc(g.rule) + '</span>' : '') + '</p></details>';
+      }).join('');
   }
 
   /* ---------------- alerts ---------------- */
@@ -798,7 +1074,7 @@
       '<tr><td>Moon</td><td>×0.80–1.0</td><td>Illuminated fraction × the share of the dark window the moon is actually up. A small penalty: aurora outshines moonlight, faint arcs do not.</td></tr>' +
       '</tbody></table></div>' +
       '<p style="font-size:13.5px;color:var(--ink-2)">Verdicts: <b>GO</b> 70+, <b>WATCH</b> 50–69, <b>SLIM</b> 30–49, <b>NO</b> below 30. ' +
-      'The Kp forecast comes in 3-hour blocks and is a planetary average — a substorm can fire an hour early or never fire at all. ' +
+      'The Kp forecast comes in 3-hour blocks and is a planetary average — a ' + T('substorm', 'substorm') + ' can fire an hour early or never fire at all. ' +
       'When you are already outside, the panel at the top is what matters: Bz below −5 nT held for half an hour is the signal that something is about to happen.</p>';
   }
 
@@ -840,7 +1116,7 @@
   window.addEventListener('resize', function () {
     clearTimeout(resizeTimer);
     resizeTimer = setTimeout(function () {
-      if (state.nights.length) { renderBzChart(); renderTimeline(); }
+      if (state.nights.length) { renderBzChart(); renderTimeline(); renderMap(); }
     }, 180);
   });
 

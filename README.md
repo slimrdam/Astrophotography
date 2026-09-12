@@ -34,7 +34,9 @@ night crosses into GO.
 | Three nights | Score, Kp peak, cloud, dark window and moon per night |
 | Night timeline | Kp in 3-hour blocks against the Kp *this site* needs, with cloud blocking the northern horizon underneath, twilight shading and moon-up strip |
 | Where to stand | All six sites ranked for the selected night, with travel notes |
+| Where to stand | A map of the six sites, pinned and coloured by the selected night's score, with the northern sky you would be watching shaded in. Tap a pin for that site's detail and directions |
 | NOAA alerts | Raw SWPC watches, warnings and alerts |
+| Glossary | Every term on the page — Kp, Bz, Bt, the G-scale, the aurora oval, substorms, Bortle class, the dark window — is a dotted link that explains itself where it stands. The card at the bottom lists them all at once |
 
 ### The sites
 
@@ -94,12 +96,19 @@ node scripts/check-aurora.js --threshold 60
 ## Layout
 
 ```
-index.html                       the dashboard (self-contained UI)
-assets/aurora-core.js            sites, astronomy, feeds, scoring — shared by page and script
+index.html                       the dashboard (UI, map, glossary popovers)
+assets/aurora-core.js            sites, glossary, astronomy, feeds, scoring — shared by page and script
+assets/nl-outline.js             generated coastline for the map (do not edit)
 scripts/check-aurora.js          daily job: writes data/latest.json, emits the alert
-.github/workflows/aurora-watch.yml
+scripts/build-map.js             regenerates assets/nl-outline.js
 data/latest.json                 generated snapshot (do not edit)
+.github/workflows/aurora-watch.yml   twice-daily scoring + alert issue
+.github/workflows/pages.yml          deploys to GitHub Pages
+.github/workflows/build-map.yml      manual: regenerate the map outline
 ```
+
+Glossary entries live in `GLOSSARY` in `assets/aurora-core.js`; each has a definition
+and a rule of thumb, and feeds both the popovers and the reference card.
 
 ## Data
 
@@ -109,6 +118,9 @@ data/latest.json                 generated snapshot (do not edit)
 * [Open-Meteo](https://open-meteo.com/) — hourly cloud layers, visibility, temperature
   and wind per site.
 * Sun and moon geometry is computed in the browser; nothing is sent anywhere.
+* Map boundaries from [Cartomap](https://cartomap.github.io/nl/) (province geometry
+  derived from CBS open data), simplified to ~350 m and committed as a 21 kB file — the
+  map draws itself, with no tile server and no external requests.
 
 ## Caveats
 

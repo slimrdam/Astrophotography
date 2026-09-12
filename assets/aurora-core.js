@@ -86,7 +86,7 @@
     },
     {
       id: 'amsterdam',
-      name: 'Amsterdam (home reference)',
+      name: 'Amsterdam',
       short: 'Amsterdam',
       lat: 52.370, lon: 4.895,
       bortle: 8,
@@ -97,6 +97,104 @@
       home: true
     }
   ];
+
+
+  /* ------------------------------------------------------------------ *
+   * Glossary — the popovers on the dashboard and the reference card at
+   * the bottom of the page are both rendered from this.
+   * ------------------------------------------------------------------ */
+  var GLOSSARY = {
+    kp: {
+      term: 'Kp index',
+      body: 'How hard Earth\u2019s magnetic field is being shaken, on a 0\u20139 scale, averaged from magnetometers around the world. One value every three hours. The higher it goes, the further south the aurora oval is pushed.',
+      rule: 'From the Dutch coast a camera starts catching a glow around Kp 5; the naked eye usually needs 6.'
+    },
+    gscale: {
+      term: 'G-scale',
+      body: 'NOAA\u2019s geomagnetic storm scale, G1 (minor) to G5 (extreme). It maps onto Kp: G1 = Kp 5, G2 = 6, G3 = 7, G4 = 8, G5 = 9.',
+      rule: 'G2 is the level at which the Netherlands starts to be worth a drive.'
+    },
+    bz: {
+      term: 'Bz',
+      body: 'The north\u2013south component of the magnetic field carried by the solar wind, in nanotesla. When Bz turns negative (southward) it links up with Earth\u2019s own field and lets energy pour in. Positive Bz keeps the door shut, however fast the wind is blowing.',
+      rule: 'Below \u22125 nT held for half an hour means something is starting. \u221215 nT is a serious night.'
+    },
+    bt: {
+      term: 'Bt',
+      body: 'Total strength of the interplanetary magnetic field. It sets the ceiling for Bz \u2014 Bz can never be more negative than Bt is strong.',
+      rule: 'A high Bt with a northward Bz is loaded potential: if it rotates south, it goes off quickly.'
+    },
+    speed: {
+      term: 'Solar wind speed',
+      body: 'How fast the plasma from the sun is arriving, in km/s. Ambient wind is 300\u2013400. Streams from coronal holes run 600\u2013800, and a CME shock can arrive faster still.',
+      rule: 'Above 500 km/s the odds improve, but speed without a southward Bz rarely produces anything.'
+    },
+    density: {
+      term: 'Proton density',
+      body: 'Protons per cubic centimetre in the solar wind. A denser wind presses harder on the magnetosphere.',
+      rule: 'A sudden jump in density and speed together is usually the shock front of a CME arriving.'
+    },
+    propagated: {
+      term: 'Propagated to Earth',
+      body: 'The solar wind is measured by a spacecraft at L1, a gravitational balance point 1.5 million km sunward of Earth. NOAA time-shifts those readings for the 25\u201360 minutes the wind takes to cover the rest of the distance.',
+      rule: 'So these numbers describe what is hitting the magnetic field about now \u2014 no mental arithmetic needed.'
+    },
+    oval: {
+      term: 'Aurora oval (OVATION)',
+      body: 'NOAA\u2019s short-term model of where aurora is being produced right now, as a probability on a map. This dashboard reads the band between 54\u00b0 and 66\u00b0N over the North Sea.',
+      rule: 'At Dutch latitudes you are looking at that band low on the horizon, not at the sky above you.'
+    },
+    substorm: {
+      term: 'Substorm',
+      body: 'Energy stored in Earth\u2019s magnetotail releasing all at once, over 20 to 60 minutes. The aurora suddenly brightens, structures into rays and moves. This is the part people actually see.',
+      rule: 'Kp is a three-hour average and cannot predict substorms, which is why a quiet-looking night can still deliver \u2014 and a promising one can stay flat.'
+    },
+    darkwindow: {
+      term: 'Dark window',
+      body: 'The hours when the sun is more than 12\u00b0 below the horizon (nautical darkness) \u2014 dark enough for aurora on the northern horizon. Astronomical darkness is 18\u00b0 below.',
+      rule: 'Between mid-May and late July the Netherlands never reaches \u221218\u00b0, and in June barely reaches \u221212\u00b0.'
+    },
+    moon: {
+      term: 'Moon',
+      body: 'The illuminated fraction of the disc, and how much of the dark window it spends above the horizon. Moonlight raises the background the aurora has to compete against.',
+      rule: 'A real display outshines a full moon; only faint arcs get washed out, so it costs at most 20% of the score here.'
+    },
+    blocked: {
+      term: 'Horizon blocked',
+      body: 'How much of the northern horizon the cloud layers cover, weighting low cloud \u00d70.55, mid \u00d70.30 and high \u00d70.15. Fog \u2014 visibility under 2 km \u2014 overrides everything.',
+      rule: 'Low cloud is what kills a night: the aurora is 100 km up, so anything below it is a wall. High cirrus only dims it.'
+    },
+    bortle: {
+      term: 'Bortle class',
+      body: 'A 1-to-9 scale of light pollution, from a pristine desert sky to the middle of a city. Lauwersoog and Texel sit around 4; Amsterdam is 8.',
+      rule: 'It matters most for faint displays, which have to compete with the orange dome over the towns on your northern horizon.'
+    },
+    score: {
+      term: 'Score',
+      body: 'One number per site per night: 100 \u00d7 (geomagnetic/100)^0.6 \u00d7 (sky/100)^0.4 \u00d7 darkness \u00d7 moon. A weighted geometric mean, not a sum.',
+      rule: 'Because it multiplies, a zero in any ingredient is fatal \u2014 a G4 storm behind solid stratus scores nothing, and a perfectly clear night with no storm scores nothing either.'
+    },
+    verdict: {
+      term: 'Verdict',
+      body: 'GO is 70 and above \u2014 conditions line up, go. WATCH is 50\u201369 \u2014 worth looking north and taking a test shot. SLIM is 30\u201349 \u2014 only if a substorm fires. NO is below 30.',
+      rule: 'The verdict follows the best of the six sites, not your doorstep.'
+    },
+    kpneed: {
+      term: 'Kp needed here',
+      body: 'The Kp at which this particular spot starts to deliver: first for a camera on a tripod, then for the naked eye. It is lower where the sky is dark and the northern horizon is open water, higher under a city light dome.',
+      rule: 'Lauwersoog pays off a full Kp point earlier than Amsterdam \u2014 that difference is the whole argument for driving.'
+    },
+    primewindow: {
+      term: 'Prime window',
+      body: 'The stretch of the night when the forecast Kp is within 0.7 of its peak and the sky is at least half open.',
+      rule: 'If you can only be out for two hours, be out for these.'
+    },
+    twilight: {
+      term: 'Twilight shoulder',
+      body: 'The hours either side of the dark window, shown on the timeline but not scored. The sky is still too bright for a faint aurora, though a strong one cuts through.',
+      rule: 'In June this is most of the night, which is why summer scores stay low.'
+    }
+  };
 
   var ENDPOINTS = {
     kpForecast: 'https://services.swpc.noaa.gov/products/noaa-planetary-k-index-forecast.json',
@@ -815,6 +913,7 @@
     VERSION: VERSION,
     TZ: TZ,
     SITES: SITES,
+    GLOSSARY: GLOSSARY,
     ENDPOINTS: ENDPOINTS,
     VERDICTS: VERDICTS,
     // astronomy
